@@ -11,7 +11,7 @@ services:
     ports:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
-      - "8889:8889"   # Prometheus metrics exporter
+      - "8888:8888"   # Metrics for the collector itself
     networks:
       - otel-network
 
@@ -25,7 +25,8 @@ services:
       - tempo-data:/var/tempo
     ports:
       - "3200:3200"   # Tempo API
-      - "4317"        # OTLP gRPC receiver
+      - "4319:4319"   # OTLP gRPC receiver (Changed to avoid conflict with OTEL Collector from default 4317)
+      - "4320:4320"   # OTLP HTTP receiver（Changed to avoid conflict with OTEL Collector from default 4318)
     networks:
       - otel-network
 
@@ -50,6 +51,7 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--enable-feature=exemplar-storage'
+      - '--web.enable-remote-write-receiver'
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
@@ -165,12 +167,13 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_SERVICE_NAME=java-spring-boot-service
       - OTEL_TRACES_EXPORTER=otlp
-      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
       - OTEL_LOGS_EXPORTER=otlp
       - OTEL_METRICS_EXEMPLAR_FILTER=ALWAYS_ON
       - SPRING_DATASOURCE_URL=jdbc:sqlite:/data/notifications.db
     ports:
       - "8081:8081"
+      - "9464:9464"  # OpenTelemetry Java AgentのPrometheusエクスポーター用ポート
     volumes:
       - ./data:/data
     depends_on:

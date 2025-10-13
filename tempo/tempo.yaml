@@ -6,9 +6,9 @@ distributor:
     otlp:
       protocols:
         grpc:
-          endpoint: 0.0.0.0:4317
+          endpoint: 0.0.0.0:4319 # Otel Collectorと被らないようにするため、デフォルトの4317から変更
         http:
-          endpoint: 0.0.0.0:4318
+          endpoint: 0.0.0.0:4320 # Otel Collectorと被らないようにするため、デフォルトの4318から変更
 
 ingester:
   max_block_duration: 5m

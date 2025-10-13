@@ -18,23 +18,20 @@ processors:
   resource:
     attributes:
       - key: environment
-        value: demo
+        value: homelab
         action: insert
 
 exporters:
   # Tempo for traces
   otlp/tempo:
-    endpoint: tempo:4317
+    endpoint: tempo:4319
     tls:
       insecure: true
 
-  # Prometheus for metrics
-  prometheus:
-    endpoint: "0.0.0.0:8889"
-    namespace: otel_demo
-    enable_open_metrics: true
-    resource_to_telemetry_conversion:
-      enabled: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/loki/otlp
+    tls:
+      insecure: true
 
   # Debug for debugging
   debug:
@@ -52,9 +49,9 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [prometheus, debug]
+      exporters: [debug]
 
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [debug]
+      exporters: [otlphttp/loki, debug]
