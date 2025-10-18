@@ -36,6 +36,10 @@ exporters:
     resource_to_telemetry_conversion:
       enabled: true
 
+  # Loki for logs
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
   # Debug for debugging
   debug:
     verbosity: detailed
@@ -57,4 +61,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [debug]
+      exporters: [otlphttp/loki, debug]
