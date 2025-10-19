@@ -38,6 +38,12 @@ exporters:
     sampling_initial: 5
     sampling_thereafter: 200
 
+  prometheusremotewrite:
+    endpoint: "http://prometheus:9090/api/v1/write"
+    # Enable exemplar support for Remote Write 2.0
+    send_metadata: true
+    add_metric_suffixes: false
+
 service:
   pipelines:
     traces:
@@ -48,7 +54,7 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [debug]
+      exporters: [debug, prometheusremotewrite]
 
     logs:
       receivers: [otlp]

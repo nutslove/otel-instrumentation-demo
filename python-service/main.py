@@ -7,17 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
-
-# Configure logging with trace context format
+# Configure logging - log format is set by OTEL_PYTHON_LOG_FORMAT environment variable
+# Trace context injection is enabled by OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] trace_id=%(otelTraceID)s span_id=%(otelSpanID)s - %(message)s'
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Instrument logging to inject trace context
-LoggingInstrumentor().instrument(set_logging_format=False)
 
 DB_PATH = "/data/orders.db"
 
