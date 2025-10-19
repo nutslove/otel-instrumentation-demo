@@ -7,11 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 
-from opentelemetry import trace
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with trace context format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] trace_id=%(otelTraceID)s span_id=%(otelSpanID)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+# Instrument logging to inject trace context
+LoggingInstrumentor().instrument(set_logging_format=False)
 
 DB_PATH = "/data/orders.db"
 
@@ -60,17 +66,12 @@ class Order(BaseModel):
 
 @app.get("/")
 async def root():
-    span = trace.get_current_span()
-    trace_id = format(span.get_span_context().trace_id, '032x')
-    logger.info(f"Python service root endpoint called - trace_id: {trace_id}")
-    return {"service": "python-fastapi", "status": "running", "trace_id": trace_id}
+    logger.info("Python service root endpoint called")
+    return {"service": "python-fastapi", "status": "running"}
 
 @app.post("/orders")
 async def create_order(order: Order):
-    span = trace.get_current_span()
-    trace_id = format(span.get_span_context().trace_id, '032x')
-
-    logger.info(f"Creating order for user {order.user_id} - trace_id: {trace_id}")
+    logger.info(f"Creating order for user {order.user_id}")
 
     # Database insert
     conn = sqlite3.connect(DB_PATH)
@@ -90,9 +91,9 @@ async def create_order(order: Order):
             json={"product_name": order.product_name, "quantity": order.quantity}
         )
         inventory_result = response.json()
-        logger.info(f"Inventory check result: {inventory_result} - trace_id: {trace_id}")
+        logger.info(f"Inventory check result: {inventory_result}")
     except Exception as e:
-        logger.error(f"Failed to check inventory: {e} - trace_id: {trace_id}")
+        logger.error(f"Failed to check inventory: {e}")
         inventory_result = {"available": False, "error": str(e)}
 
     # If inventory is available, reserve it (Node.js → Go)
@@ -104,9 +105,9 @@ async def create_order(order: Order):
                 json={"product_name": order.product_name, "quantity": order.quantity}
             )
             pricing_result = reserve_response.json()
-            logger.info(f"Inventory reserved with pricing: {pricing_result} - trace_id: {trace_id}")
+            logger.info(f"Inventory reserved with pricing: {pricing_result}")
         except Exception as e:
-            logger.error(f"Failed to reserve inventory: {e} - trace_id: {trace_id}")
+            logger.error(f"Failed to reserve inventory: {e}")
             pricing_result = {"error": str(e)}
 
     # Send notification (Java)
@@ -121,28 +122,24 @@ async def create_order(order: Order):
             }
         )
         notification_result = notification_response.json()
-        logger.info(f"Notification sent: {notification_result} - trace_id: {trace_id}")
+        logger.info(f"Notification sent: {notification_result}")
     except Exception as e:
-        logger.error(f"Failed to send notification: {e} - trace_id: {trace_id}")
+        logger.error(f"Failed to send notification: {e}")
         notification_result = {"error": str(e)}
 
-    logger.info(f"Order {order_id} created successfully - trace_id: {trace_id}")
+    logger.info(f"Order {order_id} created successfully")
 
     return {
         "order_id": order_id,
         "status": "pending",
         "inventory_check": inventory_result,
         "pricing": pricing_result,
-        "notification": notification_result,
-        "trace_id": trace_id
+        "notification": notification_result
     }
 
 @app.get("/orders")
 async def get_orders():
-    span = trace.get_current_span()
-    trace_id = format(span.get_span_context().trace_id, '032x')
-
-    logger.info(f"Fetching all orders - trace_id: {trace_id}")
+    logger.info("Fetching all orders")
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -151,8 +148,8 @@ async def get_orders():
     orders = [dict(row) for row in cursor.fetchall()]
     conn.close()
 
-    logger.info(f"Retrieved {len(orders)} orders - trace_id: {trace_id}")
-    return {"orders": orders, "trace_id": trace_id}
+    logger.info(f"Retrieved {len(orders)} orders")
+    return {"orders": orders}
 
 @app.get("/health")
 async def health():
@@ -160,17 +157,12 @@ async def health():
 
 @app.get("/error")
 async def intentional_error():
-    span = trace.get_current_span()
-    trace_id = format(span.get_span_context().trace_id, '032x')
-    logger.error(f"Intentional error triggered - trace_id: {trace_id}")
+    logger.error("Intentional error triggered")
     raise HTTPException(status_code=500, detail="Intentional error for testing")
 
 @app.post("/orders/error")
 async def create_order_with_error(order: Order):
-    span = trace.get_current_span()
-    trace_id = format(span.get_span_context().trace_id, '032x')
-
-    logger.info(f"Creating order with intentional error for user {order.user_id} - trace_id: {trace_id}")
+    logger.info(f"Creating order with intentional error for user {order.user_id}")
 
     # Call Node.js service for inventory check
     try:
@@ -179,9 +171,9 @@ async def create_order_with_error(order: Order):
             json={"product_name": order.product_name, "quantity": order.quantity}
         )
         inventory_result = response.json()
-        logger.info(f"Inventory check result: {inventory_result} - trace_id: {trace_id}")
+        logger.info(f"Inventory check result: {inventory_result}")
     except Exception as e:
-        logger.error(f"Failed to check inventory: {e} - trace_id: {trace_id}")
+        logger.error(f"Failed to check inventory: {e}")
         inventory_result = {"available": False, "error": str(e)}
 
     # Call Node.js to reserve (which will call Go with error)
@@ -193,9 +185,9 @@ async def create_order_with_error(order: Order):
                 json={"product_name": order.product_name, "quantity": order.quantity}
             )
             pricing_result = reserve_response.json()
-            logger.info(f"Reserve response (with error): {pricing_result} - trace_id: {trace_id}")
+            logger.info(f"Reserve response (with error): {pricing_result}")
         except Exception as e:
-            logger.error(f"Failed to reserve inventory (expected error): {e} - trace_id: {trace_id}")
+            logger.error(f"Failed to reserve inventory (expected error): {e}")
             pricing_result = {"error": str(e)}
 
     # Send notification (Java) even if error occurred
@@ -210,18 +202,17 @@ async def create_order_with_error(order: Order):
             }
         )
         notification_result = notification_response.json()
-        logger.info(f"Notification sent: {notification_result} - trace_id: {trace_id}")
+        logger.info(f"Notification sent: {notification_result}")
     except Exception as e:
-        logger.error(f"Failed to send notification: {e} - trace_id: {trace_id}")
+        logger.error(f"Failed to send notification: {e}")
         notification_result = {"error": str(e)}
 
-    logger.error(f"Order workflow completed with errors - trace_id: {trace_id}")
+    logger.error("Order workflow completed with errors")
 
     return {
         "status": "error",
         "inventory_check": inventory_result,
         "pricing_error": pricing_result,
         "notification": notification_result,
-        "trace_id": trace_id,
         "message": "This order workflow intentionally includes errors across all services for testing"
     }

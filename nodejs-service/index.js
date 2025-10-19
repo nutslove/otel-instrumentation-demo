@@ -1,7 +1,6 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
-const { trace } = require('@opentelemetry/api');
 
 const app = express();
 app.use(express.json());
@@ -35,72 +34,61 @@ db.serialize(() => {
 });
 
 app.get('/', (req, res) => {
-  const span = trace.getActiveSpan();
-  const traceId = span?.spanContext().traceId || '';
+  console.log('Node.js service root endpoint called');
 
-  console.log(`Node.js service root endpoint called - trace_id: ${traceId}`);
-
-  res.json({ service: 'nodejs-express', status: 'running', trace_id: traceId });
+  res.json({ service: 'nodejs-express', status: 'running' });
 });
 
 app.post('/inventory/check', (req, res) => {
   const { product_name, quantity } = req.body;
-  const span = trace.getActiveSpan();
-  const traceId = span?.spanContext().traceId || '';
 
-  console.log(`[DEBUG] Checking inventory for ${product_name} - trace_id: ${traceId}`);
+  console.log(`[DEBUG] Checking inventory for ${product_name}`);
 
   db.get(
     'SELECT * FROM inventory WHERE product_name = ?',
     [product_name],
     (err, row) => {
       if (err) {
-        console.error(`Database error: ${err.message} - trace_id: ${traceId}`);
-        return res.status(500).json({ error: err.message, trace_id: traceId });
+        console.error(`Database error: ${err.message}`);
+        return res.status(500).json({ error: err.message });
       }
 
       if (!row) {
-        console.warn(`Product not found: ${product_name} - trace_id: ${traceId}`);
-        return res.json({ available: false, message: 'Product not found', trace_id: traceId });
+        console.warn(`Product not found: ${product_name}`);
+        return res.json({ available: false, message: 'Product not found' });
       }
 
       const available = row.quantity >= quantity;
-      console.log(`Inventory check result: ${available} - trace_id: ${traceId}`);
+      console.log(`Inventory check result: ${available}`);
 
       res.json({
         available,
         product_name: row.product_name,
         available_quantity: row.quantity,
         requested_quantity: quantity,
-        trace_id: traceId,
       });
     }
   );
 });
 
 app.get('/inventory', (req, res) => {
-  const span = trace.getActiveSpan();
-  const traceId = span?.spanContext().traceId || '';
-
-  console.log(`Fetching all inventory - trace_id: ${traceId}`);
+  console.log('Fetching all inventory');
 
   db.all('SELECT * FROM inventory', [], (err, rows) => {
     if (err) {
-      console.error(`Database error: ${err.message} - trace_id: ${traceId}`);
-      return res.status(500).json({ error: err.message, trace_id: traceId });
+      console.error(`Database error: ${err.message}`);
+      return res.status(500).json({ error: err.message });
     }
 
-    console.log(`Retrieved ${rows.length} inventory items - trace_id: ${traceId}`);
-    res.json({ inventory: rows, trace_id: traceId });
+    console.log(`Retrieved ${rows.length} inventory items`);
+    res.json({ inventory: rows });
   });
 });
 
 app.post('/inventory/reserve', async (req, res) => {
   const { product_name, quantity } = req.body;
-  const span = trace.getActiveSpan();
-  const traceId = span?.spanContext().traceId || '';
 
-  console.log(`Reserving inventory for ${product_name} - trace_id: ${traceId}`);
+  console.log(`Reserving inventory for ${product_name}`);
 
   // Call Go service for pricing
   try {
@@ -109,16 +97,15 @@ app.post('/inventory/reserve', async (req, res) => {
       quantity,
     });
     const pricingResult = response.data;
-    console.log(`Pricing calculated: ${JSON.stringify(pricingResult)} - trace_id: ${traceId}`);
+    console.log(`Pricing calculated: ${JSON.stringify(pricingResult)}`);
 
     res.json({
       reserved: true,
       pricing: pricingResult,
-      trace_id: traceId,
     });
   } catch (error) {
-    console.error(`Failed to get pricing: ${error.message} - trace_id: ${traceId}`);
-    res.status(500).json({ error: error.message, trace_id: traceId });
+    console.error(`Failed to get pricing: ${error.message}`);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -127,22 +114,16 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/error', (req, res) => {
-  const span = trace.getActiveSpan();
-  const traceId = span?.spanContext().traceId || '';
-
-  console.error(`Intentional error triggered - trace_id: ${traceId}`);
+  console.error('Intentional error triggered');
   res.status(500).json({
-    error: 'Intentional error for testing',
-    trace_id: traceId
+    error: 'Intentional error for testing'
   });
 });
 
 app.post('/inventory/reserve/error', async (req, res) => {
   const { product_name, quantity } = req.body;
-  const span = trace.getActiveSpan();
-  const traceId = span?.spanContext().traceId || '';
 
-  console.log(`Reserving inventory with error test for ${product_name} - trace_id: ${traceId}`);
+  console.log(`Reserving inventory with error test for ${product_name}`);
 
   // Call Go service for pricing with error endpoint
   try {
@@ -151,19 +132,17 @@ app.post('/inventory/reserve/error', async (req, res) => {
       quantity,
     });
     const pricingResult = response.data;
-    console.error(`Pricing calculated with error: ${JSON.stringify(pricingResult)} - trace_id: ${traceId}`);
+    console.error(`Pricing calculated with error: ${JSON.stringify(pricingResult)}`);
 
     res.status(500).json({
       reserved: false,
       pricing_error: pricingResult,
-      trace_id: traceId,
       error: 'Error occurred during pricing calculation'
     });
   } catch (error) {
-    console.error(`Failed to get pricing (expected): ${error.message} - trace_id: ${traceId}`);
+    console.error(`Failed to get pricing (expected): ${error.message}`);
     res.status(500).json({
       error: error.message,
-      trace_id: traceId,
       message: 'Error in pricing service call'
     });
   }

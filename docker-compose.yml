@@ -94,14 +94,21 @@ services:
       - OTEL_LOGS_EXPORTER=otlp
       - OTEL_METRICS_EXEMPLAR_FILTER=always_on
       - OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
+      - OTEL_PYTHON_LOG_CORRELATION=true
     ports:
       - "8000:8000"
     volumes:
       - ./data:/data
     depends_on:
       - otel-collector
+      - loki
     networks:
       - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=python-service,job=docker"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -128,8 +135,14 @@ services:
       - ./data:/data
     depends_on:
       - otel-collector
+      - loki
     networks:
       - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=nodejs-service,job=docker"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -150,8 +163,14 @@ services:
       - ./data:/data
     depends_on:
       - otel-collector
+      - loki
     networks:
       - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=go-service,job=docker"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
       interval: 30s
@@ -179,8 +198,14 @@ services:
       - ./data:/data
     depends_on:
       - otel-collector
+      - loki
     networks:
       - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=java-service,job=docker"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 30s
