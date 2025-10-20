@@ -47,7 +47,6 @@ type PricingResponse struct {
 	UnitPrice   float64 `json:"unit_price"`
 	Quantity    int     `json:"quantity"`
 	TotalPrice  float64 `json:"total_price"`
-	TraceID     string  `json:"trace_id"`
 }
 
 func initTelemetry(ctx context.Context) (func(), error) {
@@ -215,9 +214,8 @@ func main() {
 		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Go service root endpoint called - trace_id: %s", traceID))
 
 		c.JSON(http.StatusOK, gin.H{
-			"service":  "go-gin",
-			"status":   "running",
-			"trace_id": traceID,
+			"service": "go-gin",
+			"status":  "running",
 		})
 	})
 
@@ -229,7 +227,7 @@ func main() {
 		var req PricingRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Invalid request: %v - trace_id: %s", err, traceID))
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "trace_id": traceID})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -253,7 +251,7 @@ func main() {
 
 		if err != nil {
 			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
-			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found", "trace_id": traceID})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 			return
 		}
 
@@ -269,7 +267,6 @@ func main() {
 			UnitPrice:   unitPrice,
 			Quantity:    req.Quantity,
 			TotalPrice:  totalPrice,
-			TraceID:     traceID,
 		})
 	})
 
@@ -292,7 +289,7 @@ func main() {
 
 		if err != nil {
 			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "trace_id": traceID})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		defer rows.Close()
@@ -315,8 +312,7 @@ func main() {
 		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Retrieved %d pricing items - trace_id: %s", len(pricing), traceID))
 
 		c.JSON(http.StatusOK, gin.H{
-			"pricing":  pricing,
-			"trace_id": traceID,
+			"pricing": pricing,
 		})
 	})
 
@@ -332,8 +328,7 @@ func main() {
 		emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Intentional error triggered - trace_id: %s", traceID))
 
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":    "Intentional error for testing",
-			"trace_id": traceID,
+			"error": "Intentional error for testing",
 		})
 	})
 
@@ -345,7 +340,7 @@ func main() {
 		var req PricingRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Invalid request: %v - trace_id: %s", err, traceID))
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "trace_id": traceID})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -369,7 +364,7 @@ func main() {
 
 		if err != nil {
 			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
-			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found", "trace_id": traceID})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 			return
 		}
 
@@ -383,7 +378,6 @@ func main() {
 			"unit_price":   unitPrice,
 			"quantity":     req.Quantity,
 			"total_price":  totalPrice,
-			"trace_id":     traceID,
 			"message":      "This is an intentional error for testing distributed tracing",
 		})
 	})
