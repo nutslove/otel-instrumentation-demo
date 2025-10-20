@@ -1,6 +1,19 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
+const winston = require('winston');
+
+// Winston ロガーの設定
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console()
+  ]
+});
 
 const app = express();
 app.use(express.json());
@@ -34,7 +47,7 @@ db.serialize(() => {
 });
 
 app.get('/', (req, res) => {
-  console.log('Node.js service root endpoint called');
+  logger.info('Node.js service root endpoint called');
 
   res.json({ service: 'nodejs-express', status: 'running' });
 });
@@ -42,24 +55,24 @@ app.get('/', (req, res) => {
 app.post('/inventory/check', (req, res) => {
   const { product_name, quantity } = req.body;
 
-  console.log(`[DEBUG] Checking inventory for ${product_name}`);
+  logger.info('Checking inventory', { product_name, quantity });
 
   db.get(
     'SELECT * FROM inventory WHERE product_name = ?',
     [product_name],
     (err, row) => {
       if (err) {
-        console.error(`Database error: ${err.message}`);
+        logger.error('Database error', { error: err.message });
         return res.status(500).json({ error: err.message });
       }
 
       if (!row) {
-        console.warn(`Product not found: ${product_name}`);
+        logger.warn('Product not found', { product_name });
         return res.json({ available: false, message: 'Product not found' });
       }
 
       const available = row.quantity >= quantity;
-      console.log(`Inventory check result: ${available}`);
+      logger.info('Inventory check result', { available, product_name });
 
       res.json({
         available,
@@ -72,15 +85,15 @@ app.post('/inventory/check', (req, res) => {
 });
 
 app.get('/inventory', (req, res) => {
-  console.log('Fetching all inventory');
+  logger.info('Fetching all inventory');
 
   db.all('SELECT * FROM inventory', [], (err, rows) => {
     if (err) {
-      console.error(`Database error: ${err.message}`);
+      logger.error('Database error', { error: err.message });
       return res.status(500).json({ error: err.message });
     }
 
-    console.log(`Retrieved ${rows.length} inventory items`);
+    logger.info('Retrieved inventory items', { count: rows.length });
     res.json({ inventory: rows });
   });
 });
@@ -88,7 +101,7 @@ app.get('/inventory', (req, res) => {
 app.post('/inventory/reserve', async (req, res) => {
   const { product_name, quantity } = req.body;
 
-  console.log(`Reserving inventory for ${product_name}`);
+  logger.info('Reserving inventory', { product_name, quantity });
 
   // Call Go service for pricing
   try {
@@ -97,14 +110,14 @@ app.post('/inventory/reserve', async (req, res) => {
       quantity,
     });
     const pricingResult = response.data;
-    console.log(`Pricing calculated: ${JSON.stringify(pricingResult)}`);
+    logger.info('Pricing calculated', { pricingResult });
 
     res.json({
       reserved: true,
       pricing: pricingResult,
     });
   } catch (error) {
-    console.error(`Failed to get pricing: ${error.message}`);
+    logger.error('Failed to get pricing', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
@@ -114,7 +127,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/error', (req, res) => {
-  console.error('Intentional error triggered');
+  logger.error('Intentional error triggered');
   res.status(500).json({
     error: 'Intentional error for testing'
   });
@@ -123,7 +136,7 @@ app.get('/error', (req, res) => {
 app.post('/inventory/reserve/error', async (req, res) => {
   const { product_name, quantity } = req.body;
 
-  console.log(`Reserving inventory with error test for ${product_name}`);
+  logger.info('Reserving inventory with error test', { product_name, quantity });
 
   // Call Go service for pricing with error endpoint
   try {
@@ -132,7 +145,7 @@ app.post('/inventory/reserve/error', async (req, res) => {
       quantity,
     });
     const pricingResult = response.data;
-    console.error(`Pricing calculated with error: ${JSON.stringify(pricingResult)}`);
+    logger.error('Pricing calculated with error', { pricingResult });
 
     res.status(500).json({
       reserved: false,
@@ -140,7 +153,7 @@ app.post('/inventory/reserve/error', async (req, res) => {
       error: 'Error occurred during pricing calculation'
     });
   } catch (error) {
-    console.error(`Failed to get pricing (expected): ${error.message}`);
+    logger.error('Failed to get pricing (expected)', { error: error.message });
     res.status(500).json({
       error: error.message,
       message: 'Error in pricing service call'
@@ -150,11 +163,12 @@ app.post('/inventory/reserve/error', async (req, res) => {
 
 const PORT = 3000;
 app.listen(PORT, () => {
-  console.log(`Node.js service listening on port ${PORT}`);
+  logger.info('Node.js service started', { port: PORT });
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
   db.close();
   process.exit(0);
 });

@@ -11,6 +11,12 @@
     "sqlite3": "^5.1.7",
     "axios": "^1.6.5",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.52.0"
+    "@opentelemetry/auto-instrumentations-node": "^0.65.0",
+    "@opentelemetry/sdk-node": "^0.206.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.206.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.206.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.206.0",
+    "@opentelemetry/instrumentation-runtime-node": "^0.20.0",
+    "winston": "^3.15.0"
   }
 }
