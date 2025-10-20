@@ -6,12 +6,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy and install patched packages AFTER requirements.txt to ensure they override official packages
-COPY otel-python-patched-packages /tmp/otel-python-patched-packages
-RUN pip install --no-cache-dir --force-reinstall --no-deps /tmp/otel-python-patched-packages/asgi /tmp/otel-python-patched-packages/httpx
+# # Copy and install patched packages AFTER requirements.txt to ensure they override official packages
+# COPY otel-python-patched-packages /tmp/otel-python-patched-packages
+# RUN pip install --no-cache-dir --force-reinstall --no-deps /tmp/otel-python-patched-packages/asgi /tmp/otel-python-patched-packages/httpx
 
-# Clean up
-RUN rm -rf /tmp/otel-python-patched-packages
+# # Clean up
+# RUN rm -rf /tmp/otel-python-patched-packages
 
 COPY main.py .
 
