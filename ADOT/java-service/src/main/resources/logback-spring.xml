@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - trace_id=%X{trace_id} span_id=%X{span_id} trace_flags=%X{trace_flags} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Just wrap your logging appender, for example ConsoleAppender, with OpenTelemetryAppender -->
+  <appender name="OpenTelemetry" class="io.opentelemetry.instrumentation.logback.mdc.v1_0.OpenTelemetryAppender">
+    <appender-ref ref="CONSOLE"/>
+  </appender>
+
+  <!-- Use the wrapped "OpenTelemetry" appender instead of the original "CONSOLE" one -->
+  <root level="INFO">
+    <appender-ref ref="OpenTelemetry"/>
+  </root>
+
+</configuration>

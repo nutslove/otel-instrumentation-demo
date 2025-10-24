@@ -1,13 +1,13 @@
 #version: '3.8'
 
 services:
-  # OpenTelemetry Collector
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.136.0
-    container_name: otel-collector
+  # AWS Distro for OpenTelemetry (ADOT) Collector
+  adot-collector:
+    image: public.ecr.aws/aws-observability/aws-otel-collector:latest
+    container_name: adot-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
-      - ./collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ./adot-collector/adot-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
@@ -88,7 +88,7 @@ services:
       no_cache: true
     container_name: python-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
       - OTEL_SERVICE_NAME=python-fastapi-service
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
@@ -105,7 +105,7 @@ services:
     volumes:
       - ./data:/data
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network
@@ -115,7 +115,7 @@ services:
         loki-url: "http://localhost:3100/loki/api/v1/push"
         loki-external-labels: "service=python-service,job=docker"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -128,7 +128,7 @@ services:
       no_cache: true
     container_name: nodejs-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
       - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
       - OTEL_SERVICE_NAME=nodejs-express-service
       - OTEL_TRACES_EXPORTER=otlp
@@ -139,7 +139,7 @@ services:
     volumes:
       - ./data:/data
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network
@@ -149,26 +149,27 @@ services:
         loki-url: "http://localhost:3100/loki/api/v1/push"
         loki-external-labels: "service=nodejs-service,job=docker"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Go Gin Service with eBPF Auto-Instrumentation - Pricing Calculation
+  # Go Gin Service - Pricing Calculation
   go-service:
-    image: go-service-ebpf:latest
+    image: go-service-manual:latest
     build:
-      context: ./go-service-ebpf
+      context: ./go-service
       dockerfile: Dockerfile
       no_cache: true
     container_name: go-service
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
     ports:
       - "8080:8080"
     volumes:
       - ./data:/data
-      - go-app-volume:/app
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network
@@ -183,30 +184,6 @@ services:
       timeout: 10s
       retries: 3
 
-  # OpenTelemetry Go eBPF Auto-Instrumentation
-  go-auto-instrumentation:
-    image: otel/autoinstrumentation-go:latest
-    container_name: go-auto-instrumentation
-    privileged: true
-    pid: "service:go-service"
-    environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-      - OTEL_GO_AUTO_TARGET_EXE=/app/go-service
-      - OTEL_SERVICE_NAME=go-gin-ebpf-service
-      - OTEL_PROPAGATORS=tracecontext,baggage
-      - OTEL_TRACES_EXPORTER=otlp
-      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-      - OTEL_LOG_LEVEL=debug
-      - OTEL_GO_AUTO_INCLUDE_DB_STATEMENT=true
-    volumes:
-      - go-app-volume:/app
-      - /proc:/host/proc
-    depends_on:
-      - go-service
-      - otel-collector
-    networks:
-      - otel-network
-
   # Java Spring Boot Service - Notification Service
   java-service:
     build:
@@ -215,7 +192,7 @@ services:
       no_cache: true
     container_name: java-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
       - OTEL_SERVICE_NAME=java-spring-boot-service # metricではこれが`job`ラベルの値になる
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=prometheus
@@ -229,7 +206,7 @@ services:
     volumes:
       - ./data:/data
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network
@@ -269,4 +246,3 @@ volumes:
   tempo-data:
   loki-data:
   grafana-data:
-  go-app-volume:

@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenTelemetry Demo - Microservices Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #f0f0f0;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .links {
+            text-align: center;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .links a {
+            color: white;
+            text-decoration: none;
+            background: rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 25px;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .links a:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .service-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s;
+        }
+
+        .service-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .service-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .status.healthy {
+            background: #4ade80;
+            color: white;
+        }
+
+        .status.unhealthy {
+            background: #ef4444;
+            color: white;
+        }
+
+        .service-info {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: opacity 0.3s;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f3f4f6;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.9em;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .trace-id {
+            background: #fef3c7;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-weight: bold;
+            word-break: break-all;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .main-action {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .main-action h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .workflow-diagram {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .workflow-diagram h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .flow-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .arrow {
+            font-size: 1.5em;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔭 OpenTelemetry Microservices Demo</h1>
+        <p class="subtitle">Distributed Tracing, Metrics, and Logs with Trace ID Correlation</p>
+
+        <div class="links">
+            <a href="http://localhost:3000" target="_blank">📊 Grafana (Observability)</a>
+        </div>
+
+        <div class="workflow-diagram">
+            <h3>🔄 Service Flow</h3>
+            <div class="flow">
+                <div class="flow-item">Web UI</div>
+                <span class="arrow">→</span>
+                <div class="flow-item">Python (FastAPI)<br/>Orders</div>
+                <span class="arrow">→</span>
+                <div class="flow-item">Node.js (Express)<br/>Inventory</div>
+                <span class="arrow">→</span>
+                <div class="flow-item">Go (Gin)<br/>Pricing</div>
+                <span class="arrow">→</span>
+                <div class="flow-item">Java (Spring Boot)<br/>Notifications</div>
+            </div>
+            <p style="text-align: center; margin-top: 15px; color: #666;">
+                All services emit traces, metrics, and logs with correlated trace IDs to OTLP Collector
+            </p>
+        </div>
+
+        <div class="main-action">
+            <h2>🛒 Create Order (Full Workflow)</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                This will trigger all microservices and demonstrate distributed tracing across Python → Node.js → Go → Java
+            </p>
+            <div class="form-group">
+                <label for="userId">User ID</label>
+                <input type="number" id="userId" value="1001" />
+            </div>
+            <div class="form-group">
+                <label for="productName">Product Name</label>
+                <select id="productName">
+                    <option value="Laptop">Laptop</option>
+                    <option value="Mouse">Mouse</option>
+                    <option value="Keyboard">Keyboard</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="quantity">Quantity</label>
+                <input type="number" id="quantity" value="2" />
+            </div>
+            <button onclick="createOrder()">Create Order & Trigger Workflow</button>
+            <div id="orderResult" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="main-action" style="background: #fee2e2; border-left: 4px solid #ef4444;">
+            <h2 style="color: #dc2626;">⚠️ Test Error Handling (Distributed)</h2>
+            <p style="color: #991b1b; margin-bottom: 20px;">
+                Trigger intentional errors across ALL connected services to see distributed error tracing
+            </p>
+            <div class="form-group">
+                <label for="errorUserId">User ID</label>
+                <input type="number" id="errorUserId" value="9999" />
+            </div>
+            <div class="form-group">
+                <label for="errorProductName">Product Name</label>
+                <select id="errorProductName">
+                    <option value="Laptop">Laptop</option>
+                    <option value="Mouse">Mouse</option>
+                    <option value="Keyboard">Keyboard</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="errorQuantity">Quantity</label>
+                <input type="number" id="errorQuantity" value="1" />
+            </div>
+            <button onclick="triggerDistributedError()" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                🔥 Trigger Distributed Error (Python → Node.js → Go → Java)
+            </button>
+            <div id="errorResult" class="result" style="display: none;"></div>
+        </div>
+
+        <h2 style="color: white; margin-bottom: 20px;">🎯 Individual Service Health & Actions</h2>
+
+        <div class="services-grid">
+            <!-- Python Service -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-name">🐍 Python (FastAPI)</div>
+                    <div class="status" id="python-status">...</div>
+                </div>
+                <div class="service-info">
+                    <strong>Purpose:</strong> Order Management<br/>
+                    <strong>Port:</strong> 8000<br/>
+                    <strong>Database:</strong> orders.db (SQLite)
+                </div>
+                <button onclick="checkService('python')">Check Health</button>
+                <button onclick="getOrders()">Get All Orders</button>
+                <div id="python-result" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Node.js Service -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-name">📦 Node.js (Express)</div>
+                    <div class="status" id="nodejs-status">...</div>
+                </div>
+                <div class="service-info">
+                    <strong>Purpose:</strong> Inventory Management<br/>
+                    <strong>Port:</strong> 3001<br/>
+                    <strong>Database:</strong> inventory.db (SQLite)
+                </div>
+                <button onclick="checkService('nodejs')">Check Health</button>
+                <button onclick="getInventory()">Get Inventory</button>
+                <div id="nodejs-result" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Go Service -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-name">🔷 Go (Gin)</div>
+                    <div class="status" id="go-status">...</div>
+                </div>
+                <div class="service-info">
+                    <strong>Purpose:</strong> Pricing Calculation<br/>
+                    <strong>Port:</strong> 8080<br/>
+                    <strong>Database:</strong> pricing.db (SQLite)
+                </div>
+                <button onclick="checkService('go')">Check Health</button>
+                <button onclick="getPricing()">Get Pricing</button>
+                <div id="go-result" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Java Service -->
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-name">☕ Java (Spring Boot)</div>
+                    <div class="status" id="java-status">...</div>
+                </div>
+                <div class="service-info">
+                    <strong>Purpose:</strong> Notification Service<br/>
+                    <strong>Port:</strong> 8081<br/>
+                    <strong>Database:</strong> notifications.db (SQLite)
+                </div>
+                <button onclick="checkService('java')">Check Health</button>
+                <button onclick="getNotifications()">Get Notifications</button>
+                <div id="java-result" class="result" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const services = {
+            python: 'http://localhost:8000',
+            nodejs: 'http://localhost:3001',
+            go: 'http://localhost:8080',
+            java: 'http://localhost:8081'
+        };
+
+        async function checkService(service) {
+            const statusEl = document.getElementById(`${service}-status`);
+            try {
+                const response = await fetch(`${services[service]}/health`);
+                const data = await response.json();
+                statusEl.textContent = 'Healthy';
+                statusEl.className = 'status healthy';
+            } catch (error) {
+                statusEl.textContent = 'Unhealthy';
+                statusEl.className = 'status unhealthy';
+            }
+        }
+
+        async function createOrder() {
+            const userId = document.getElementById('userId').value;
+            const productName = document.getElementById('productName').value;
+            const quantity = document.getElementById('quantity').value;
+            const resultEl = document.getElementById('orderResult');
+
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '⏳ Creating order and triggering full workflow...';
+
+            try {
+                // Step 1: Create order (Python)
+                const orderResponse = await fetch(`${services.python}/orders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: parseInt(userId),
+                        product_name: productName,
+                        quantity: parseInt(quantity)
+                    })
+                });
+                const orderData = await orderResponse.json();
+
+                // Step 2: Reserve inventory (Node.js → Go)
+                const reserveResponse = await fetch(`${services.nodejs}/inventory/reserve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        product_name: productName,
+                        quantity: parseInt(quantity)
+                    })
+                });
+                const reserveData = await reserveResponse.json();
+
+                // Step 3: Send notification (Java)
+                const notificationResponse = await fetch(`${services.java}/notifications/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recipient: `user_${userId}@example.com`,
+                        message: `Your order for ${quantity}x ${productName} has been placed successfully!`,
+                        type: 'email'
+                    })
+                });
+                const notificationData = await notificationResponse.json();
+
+                resultEl.innerHTML = `
+                    ✅ <strong>Order Workflow Completed!</strong><br/><br/>
+                    <strong>Step 1 - Order Created (Python):</strong><br/>
+                    Order ID: ${orderData.order_id}<br/>
+                    Status: ${orderData.status}<br/>
+                    Inventory Available: ${orderData.inventory_check.available}<br/>
+                    <div class="trace-id">🔍 Trace ID: ${orderData.trace_id}</div>
+                    <br/>
+                    <strong>Step 2 - Inventory Reserved (Node.js → Go):</strong><br/>
+                    Reserved: ${reserveData.reserved}<br/>
+                    Total Price: $${reserveData.pricing?.total_price || 'N/A'}<br/>
+                    <br/>
+                    <strong>Step 3 - Notification Sent (Java):</strong><br/>
+                    Recipient: ${notificationData.recipient}<br/>
+                    Status: ${notificationData.status}<br/>
+                    <br/>
+                    <strong>📊 View in Grafana:</strong><br/>
+                    Open <a href="http://localhost:3000/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22query%22:%22${orderData.trace_id}%22%7D%5D%7D" target="_blank" style="color: #667eea;">Grafana Tempo</a> to see the full distributed trace across all services!
+                `;
+            } catch (error) {
+                resultEl.innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+
+        async function getOrders() {
+            const resultEl = document.getElementById('python-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '⏳ Fetching orders...';
+
+            try {
+                const response = await fetch(`${services.python}/orders`);
+                const data = await response.json();
+                resultEl.innerHTML = `
+                    <strong>Orders (${data.orders.length}):</strong><br/>
+                    ${JSON.stringify(data.orders.slice(0, 3), null, 2)}
+                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
+                `;
+            } catch (error) {
+                resultEl.innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+
+        async function getInventory() {
+            const resultEl = document.getElementById('nodejs-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '⏳ Fetching inventory...';
+
+            try {
+                const response = await fetch(`${services.nodejs}/inventory`);
+                const data = await response.json();
+                resultEl.innerHTML = `
+                    <strong>Inventory:</strong><br/>
+                    ${JSON.stringify(data.inventory, null, 2)}
+                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
+                `;
+            } catch (error) {
+                resultEl.innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+
+        async function getPricing() {
+            const resultEl = document.getElementById('go-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '⏳ Fetching pricing...';
+
+            try {
+                const response = await fetch(`${services.go}/pricing`);
+                const data = await response.json();
+                resultEl.innerHTML = `
+                    <strong>Pricing:</strong><br/>
+                    ${JSON.stringify(data.pricing, null, 2)}
+                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
+                `;
+            } catch (error) {
+                resultEl.innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+
+        async function getNotifications() {
+            const resultEl = document.getElementById('java-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '⏳ Fetching notifications...';
+
+            try {
+                const response = await fetch(`${services.java}/notifications`);
+                const data = await response.json();
+                resultEl.innerHTML = `
+                    <strong>Notifications (${data.notifications.length}):</strong><br/>
+                    ${JSON.stringify(data.notifications.slice(0, 3), null, 2)}
+                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
+                `;
+            } catch (error) {
+                resultEl.innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+
+        async function triggerDistributedError() {
+            const userId = document.getElementById('errorUserId').value;
+            const productName = document.getElementById('errorProductName').value;
+            const quantity = document.getElementById('errorQuantity').value;
+            const resultEl = document.getElementById('errorResult');
+
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '⏳ Triggering distributed error workflow...<br/>Python → Node.js → Go → Java';
+
+            try {
+                const response = await fetch(`${services.python}/orders/error`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: parseInt(userId),
+                        product_name: productName,
+                        quantity: parseInt(quantity)
+                    })
+                });
+                const data = await response.json();
+
+                resultEl.innerHTML = `
+                    ❌ <strong>Distributed Error Workflow Completed!</strong><br/><br/>
+                    <strong>This error propagated through ALL services:</strong><br/>
+                    1. 🐍 Python (Order Service) - initiated error workflow<br/>
+                    2. 📦 Node.js (Inventory) - checked inventory<br/>
+                    3. 🔷 Go (Pricing) - calculated pricing with error<br/>
+                    4. ☕ Java (Notifications) - sent error notification<br/>
+                    <br/>
+                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
+                    <br/>
+                    <strong>📊 View in Grafana:</strong><br/>
+                    Open <a href="http://localhost:3000/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22query%22:%22${data.trace_id}%22%7D%5D%7D" target="_blank" style="color: #667eea;">Grafana Tempo</a>
+                    to see how the error propagated through the entire distributed system!<br/>
+                    You'll see error logs and spans across all 4 services with the same trace ID.
+                    <br/><br/>
+                    <strong>Error Details:</strong><br/>
+                    ${JSON.stringify(data, null, 2)}
+                `;
+            } catch (error) {
+                resultEl.innerHTML = `
+                    ❌ <strong>Error in Distributed Workflow</strong><br/><br/>
+                    <strong>Error Message:</strong> ${error.message}<br/>
+                    <br/>
+                    <strong>📊 Check Grafana:</strong><br/>
+                    The error has been recorded. Check
+                    <a href="http://localhost:3000/explore?datasource=tempo" target="_blank" style="color: #667eea;">Grafana Tempo</a>
+                    for recent traces with errors.
+                `;
+            }
+        }
+
+        // Check all services on load
+        window.onload = () => {
+            Object.keys(services).forEach(service => checkService(service));
+        };
+
+        // Auto-refresh status every 30 seconds
+        setInterval(() => {
+            Object.keys(services).forEach(service => checkService(service));
+        }, 30000);
+    </script>
+</body>
+</html>

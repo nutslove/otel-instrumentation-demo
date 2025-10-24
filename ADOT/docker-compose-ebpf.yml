@@ -1,13 +1,13 @@
 #version: '3.8'
 
 services:
-  # OpenTelemetry Collector
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.136.0
-    container_name: otel-collector
+  # AWS Distro for OpenTelemetry (ADOT) Collector
+  adot-collector:
+    image: public.ecr.aws/aws-observability/aws-otel-collector:latest
+    container_name: adot-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
-      - ./collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ./adot-collector/adot-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
@@ -88,7 +88,7 @@ services:
       no_cache: true
     container_name: python-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
       - OTEL_SERVICE_NAME=python-fastapi-service
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
@@ -105,7 +105,7 @@ services:
     volumes:
       - ./data:/data
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network
@@ -128,7 +128,7 @@ services:
       no_cache: true
     container_name: nodejs-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
       - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
       - OTEL_SERVICE_NAME=nodejs-express-service
       - OTEL_TRACES_EXPORTER=otlp
@@ -139,7 +139,7 @@ services:
     volumes:
       - ./data:/data
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network
@@ -168,7 +168,7 @@ services:
       - ./data:/data
       - go-app-volume:/app
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network
@@ -190,7 +190,7 @@ services:
     privileged: true
     pid: "service:go-service"
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4318
       - OTEL_GO_AUTO_TARGET_EXE=/app/go-service
       - OTEL_SERVICE_NAME=go-gin-ebpf-service
       - OTEL_PROPAGATORS=tracecontext,baggage
@@ -203,7 +203,7 @@ services:
       - /proc:/host/proc
     depends_on:
       - go-service
-      - otel-collector
+      - adot-collector
     networks:
       - otel-network
 
@@ -215,7 +215,7 @@ services:
       no_cache: true
     container_name: java-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
       - OTEL_SERVICE_NAME=java-spring-boot-service # metricではこれが`job`ラベルの値になる
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=prometheus
@@ -229,7 +229,7 @@ services:
     volumes:
       - ./data:/data
     depends_on:
-      - otel-collector
+      - adot-collector
       - loki
     networks:
       - otel-network

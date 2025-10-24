@@ -156,6 +156,7 @@ services:
 
   # Go Gin Service - Pricing Calculation
   go-service:
+    image: go-service-manual:latest
     build:
       context: ./go-service
       dockerfile: Dockerfile
@@ -194,8 +195,8 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_SERVICE_NAME=java-spring-boot-service # metricではこれが`job`ラベルの値になる
       - OTEL_TRACES_EXPORTER=otlp
-      # - OTEL_METRICS_EXPORTER=prometheus
-      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      # - OTEL_METRICS_EXPORTER=otlp
       # - OTEL_LOGS_EXPORTER=otlp
       - OTEL_METRICS_EXEMPLAR_FILTER=always_on
       - SPRING_DATASOURCE_URL=jdbc:sqlite:/data/notifications.db

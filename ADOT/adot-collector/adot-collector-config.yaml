@@ -1,0 +1,62 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+  resource:
+    attributes:
+      - key: environment
+        value: homelab
+        action: insert
+
+exporters:
+  # Tempo for traces
+  otlp/tempo:
+    endpoint: tempo:4319
+    tls:
+      insecure: true
+
+  # Loki for logs
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  # Debug for debugging
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  prometheusremotewrite:
+    endpoint: "http://prometheus:9090/api/v1/write"
+    # Enable exemplar support for Remote Write 2.0
+    send_metadata: true
+    add_metric_suffixes: false
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/tempo, debug]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [debug, prometheusremotewrite]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlphttp/loki, debug]

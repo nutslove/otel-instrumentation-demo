@@ -63,7 +63,7 @@ func initTelemetry(ctx context.Context) (func(), error) {
 
 	// Trace exporter
 	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint("otel-collector:4317"),
+		otlptracegrpc.WithEndpoint("adot-collector:4317"),
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
@@ -81,7 +81,7 @@ func initTelemetry(ctx context.Context) (func(), error) {
 
 	// Metrics exporter
 	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint("otel-collector:4317"),
+		otlpmetricgrpc.WithEndpoint("adot-collector:4317"),
 		otlpmetricgrpc.WithInsecure(),
 	)
 	if err != nil {
@@ -97,7 +97,7 @@ func initTelemetry(ctx context.Context) (func(), error) {
 
 	// Log exporter
 	logExporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint("otel-collector:4317"),
+		otlploggrpc.WithEndpoint("adot-collector:4317"),
 		otlploggrpc.WithInsecure(),
 	)
 	if err != nil {

@@ -210,7 +210,7 @@ services:
   # Java Spring Boot Service - Notification Service
   java-service:
     build:
-      context: ./java-service
+      context: ./java-service-mac
       dockerfile: Dockerfile
       no_cache: true
     container_name: java-service
