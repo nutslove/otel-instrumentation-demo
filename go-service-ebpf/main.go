@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -106,6 +110,46 @@ func main() {
 		totalPrice := unitPrice * float64(req.Quantity)
 		log.Printf("Pricing calculated: %.2f", totalPrice)
 
+		// Java serviceに通知を送信（Envoy egress検証用）
+		// 環境変数JAVA_SERVICE_URLで接続先を切り替え
+		// Envoy版: http://127.0.0.1:14318 (Envoy egress経由)
+		// それ以外: http://java-service:8081 (直接)
+		javaServiceURL := os.Getenv("JAVA_SERVICE_URL")
+		if javaServiceURL == "" {
+			javaServiceURL = "http://java-service:8081" // デフォルト
+		}
+
+		notificationData := map[string]interface{}{
+			"recipient": "pricing-service@example.com",
+			"message":   fmt.Sprintf("Price calculated: %s x %d = $%.2f", req.ProductName, req.Quantity, totalPrice),
+			"type":      "pricing_notification",
+		}
+
+		notificationJSON, err := json.Marshal(notificationData)
+		if err != nil {
+			log.Printf("Failed to marshal notification data: %v", err)
+		} else {
+			notificationEndpoint := javaServiceURL + "/notifications/send"
+			log.Printf("Sending notification to: %s", notificationEndpoint)
+
+			client := &http.Client{}
+			httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", notificationEndpoint, bytes.NewBuffer(notificationJSON))
+			if err != nil {
+				log.Printf("Failed to create notification request: %v", err)
+			} else {
+				httpReq.Header.Set("Content-Type", "application/json")
+
+				resp, err := client.Do(httpReq)
+				if err != nil {
+					log.Printf("Failed to send notification: %v", err)
+				} else {
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					log.Printf("Notification sent, response status: %d, body: %s", resp.StatusCode, string(body))
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, PricingResponse{
 			ProductName: req.ProductName,
 			UnitPrice:   unitPrice,
@@ -179,6 +223,44 @@ func main() {
 		totalPrice := unitPrice * float64(req.Quantity)
 		log.Printf("Pricing calculation error (intentional): %.2f", totalPrice)
 
+		// Java serviceにエラー通知を送信（ヘッダー伝播なし - トレースが途切れることを示す）
+		javaServiceURL := os.Getenv("JAVA_SERVICE_URL")
+		if javaServiceURL == "" {
+			javaServiceURL = "http://java-service:8081" // デフォルト
+		}
+
+		notificationData := map[string]interface{}{
+			"recipient": "pricing-service@example.com",
+			"message":   fmt.Sprintf("Pricing error: %s x %d = $%.2f (ERROR)", req.ProductName, req.Quantity, totalPrice),
+			"type":      "pricing_error_notification",
+		}
+
+		notificationJSON, err := json.Marshal(notificationData)
+		if err != nil {
+			log.Printf("Failed to marshal notification data: %v", err)
+		} else {
+			notificationEndpoint := javaServiceURL + "/notifications/send"
+			log.Printf("Sending error notification to: %s", notificationEndpoint)
+
+			client := &http.Client{}
+			httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", notificationEndpoint, bytes.NewBuffer(notificationJSON))
+			if err != nil {
+				log.Printf("Failed to create notification request: %v", err)
+			} else {
+				httpReq.Header.Set("Content-Type", "application/json")
+				// NOTE: トレースヘッダーの伝播なし - Go → Javaでトレースが途切れる
+
+				resp, err := client.Do(httpReq)
+				if err != nil {
+					log.Printf("Failed to send notification: %v", err)
+				} else {
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					log.Printf("Error notification sent, response status: %d, body: %s", resp.StatusCode, string(body))
+				}
+			}
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":        "Intentional pricing calculation error",
 			"product_name": req.ProductName,
@@ -186,6 +268,80 @@ func main() {
 			"quantity":     req.Quantity,
 			"total_price":  totalPrice,
 			"message":      "This is an intentional error for testing distributed tracing",
+		})
+	})
+
+	// 新規: 価格計算後にJava serviceの通知エンドポイントを呼び出す
+	// Envoy egressでのトレースヘッダー伝播を検証
+	r.POST("/pricing/calculate/notify", func(c *gin.Context) {
+		var req PricingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Printf("Invalid request: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		log.Printf("Calculating pricing with notification for %s (quantity: %d)", req.ProductName, req.Quantity)
+
+		// 価格計算
+		var unitPrice float64
+		err := db.QueryRowContext(c.Request.Context(), "SELECT unit_price FROM pricing WHERE product_name = ?", req.ProductName).Scan(&unitPrice)
+		if err != nil {
+			log.Printf("Database error: %v", err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+			return
+		}
+
+		totalPrice := unitPrice * float64(req.Quantity)
+		log.Printf("Pricing calculated: %.2f", totalPrice)
+
+		// Java serviceに通知を送信
+		// 環境変数JAVA_SERVICE_URLで接続先を切り替え
+		// Envoy版: http://127.0.0.1:14318 (Envoy egress経由)
+		// それ以外: http://java-service:8081 (直接)
+		javaServiceURL := os.Getenv("JAVA_SERVICE_URL")
+		if javaServiceURL == "" {
+			javaServiceURL = "http://java-service:8081" // デフォルト
+		}
+
+		notificationData := map[string]interface{}{
+			"recipient": "pricing-service@example.com",
+			"message":   fmt.Sprintf("Price calculated: %s x %d = $%.2f", req.ProductName, req.Quantity, totalPrice),
+			"type":      "pricing_notification",
+		}
+
+		notificationJSON, err := json.Marshal(notificationData)
+		if err != nil {
+			log.Printf("Failed to marshal notification data: %v", err)
+		} else {
+			notificationEndpoint := javaServiceURL + "/notifications/send"
+			log.Printf("Sending notification to: %s", notificationEndpoint)
+
+			client := &http.Client{}
+			httpReq, err := http.NewRequestWithContext(c.Request.Context(), "POST", notificationEndpoint, bytes.NewBuffer(notificationJSON))
+			if err != nil {
+				log.Printf("Failed to create notification request: %v", err)
+			} else {
+				httpReq.Header.Set("Content-Type", "application/json")
+
+				resp, err := client.Do(httpReq)
+				if err != nil {
+					log.Printf("Failed to send notification: %v", err)
+				} else {
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					log.Printf("Notification sent, response status: %d, body: %s", resp.StatusCode, string(body))
+				}
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"product_name":      req.ProductName,
+			"unit_price":        unitPrice,
+			"quantity":          req.Quantity,
+			"total_price":       totalPrice,
+			"notification_sent": true,
+			"java_service_url":  javaServiceURL,
 		})
 	})
 

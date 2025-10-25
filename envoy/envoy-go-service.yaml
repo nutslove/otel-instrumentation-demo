@@ -78,6 +78,50 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
+  # Outbound listener - go-serviceからjava-serviceへの通信（Envoy egress検証用）
+  - name: java_service_listener
+    address:
+      socket_address:
+        address: 127.0.0.1
+        port_value: 14318
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: egress_java
+          codec_type: AUTO
+          # Egressトラフィックでもトレーシング設定を追加
+          tracing:
+            provider:
+              name: envoy.tracers.opentelemetry
+              typed_config:
+                "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                grpc_service:
+                  envoy_grpc:
+                    cluster_name: otel_collector_cluster
+                  timeout: 0.250s
+                service_name: go-service-envoy-egress
+            random_sampling:
+              value: 100.0
+          generate_request_id: true
+          route_config:
+            name: java_route
+            virtual_hosts:
+            - name: java_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: java_service_cluster
+                decorator:
+                  operation: java_service_call
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
   clusters:
   # go-service cluster (localhost:8080 - same network namespace)
   - name: go_service_cluster
@@ -113,3 +157,18 @@ static_resources:
               socket_address:
                 address: otel-collector
                 port_value: 4317
+
+  # java-service cluster（Envoy egress検証用）
+  - name: java_service_cluster
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: java_service_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: java-service
+                port_value: 8081

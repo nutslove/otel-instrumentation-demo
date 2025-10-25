@@ -154,11 +154,11 @@ services:
       timeout: 10s
       retries: 3
 
-  # Go Gin Service - Pricing Calculation (No manual instrumentation - Envoy will handle tracing)
+  # Go Gin Service - Pricing Calculation (With trace header propagation)
   go-service:
-    image: go-service-envoy:latest
+    image: go-service-envoy-propagation:latest
     build:
-      context: ./go-service-ebpf
+      context: ./go-service-ebpf-propagation
       dockerfile: Dockerfile
       no_cache: true
     container_name: go-service

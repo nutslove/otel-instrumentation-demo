@@ -164,6 +164,7 @@ services:
     container_name: go-service
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:14317
+      - JAVA_SERVICE_URL=http://127.0.0.1:14318  # Envoy egress経由でjava-serviceに接続
     ports:
       - "8080:8080"   # go-service直接アクセス用（オプション）
       - "10000:10000" # Envoy ingress（メインエントリーポイント）
