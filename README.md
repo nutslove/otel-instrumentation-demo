@@ -5,6 +5,10 @@
 ## 🎯 機能
 
 - **多言語マイクロサービス**: Python、Node.js、Go、Java
+- **複数のインストルメンテーション方式**:
+  - 手動計装（OpenTelemetry SDK）
+  - Envoyサイドカーによる自動トレーシング
+  - eBPFベースの自動計装（実験的）
 - **完全なオブザーバビリティスタック**: トレース、メトリクス、ログ
 - **トレースID相関**: すべてのサービスとログ間でリクエストを追跡
 - **OTLP Collector**: 集中型テレメトリー収集
@@ -14,9 +18,11 @@
 - **Grafana**: 統合可視化ダッシュボード
 - **SQLiteデータベース**: 各サービスごとに独立したデータベース
 - **Web UI**: ワークフローをトリガーするインタラクティブダッシュボード
-- **Docker Compose**: ワンコマンドでデプロイ
+- **Docker Compose**: 複数の構成をサポート（Linux/Mac、手動計装/Envoy/eBPF）
 
 ## 🏗️ アーキテクチャ
+
+### 基本アーキテクチャ（手動計装版）
 
 ```
 Web UI (Nginx)
@@ -38,6 +44,32 @@ OpenTelemetry Collector
 Grafana (統合可視化)
 ```
 
+### Envoyサイドカーアーキテクチャ
+
+```
+Web UI (Nginx)
+    ↓
+Python Service (FastAPI) - 注文管理
+    ↓
+Node.js Service (Express) - 在庫管理
+    ↓ (ポート10000経由)
+┌─────────────────────────────┐
+│ Envoy Sidecar (ポート10000)  │ ← トレース生成
+│         ↓                    │
+│ Go Service (ポート8080)      │ ← 手動計装なし
+└─────────────────────────────┘
+    ↓
+Java Service (Spring Boot) - 通知
+    ↓
+OpenTelemetry Collector
+    ↓
+├── Grafana Tempo (トレース)
+├── Prometheus (メトリクス)
+└── Grafana Loki (ログ)
+    ↓
+Grafana (統合可視化)
+```
+
 ## 📊 サービス概要
 
 | サービス | 言語 | フレームワーク | ポート | データベース | 用途 |
@@ -46,6 +78,7 @@ Grafana (統合可視化)
 | Node.js | Node.js 18 | Express | 3001 | inventory.db | 在庫追跡 |
 | Go | Go 1.23 | Gin | 8080 | pricing.db | 価格計算 |
 | Java | Java 17 | Spring Boot | 8081 | notifications.db | 通知 |
+| Envoy Proxy | - | Envoy v1.36 | 10000 (ingress)<br>9901 (admin) | - | サイドカープロキシ<br>（Envoy版のみ） |
 | Web UI | - | Nginx | 80 | - | ユーザーインターフェース |
 | OTLP Collector | - | - | 4317/4318 | - | テレメトリー収集 |
 | Grafana Tempo | - | - | 3200 | - | トレースバックエンド |
@@ -58,16 +91,59 @@ Grafana (統合可視化)
 ### 前提条件
 
 - Docker
-- Docker Compose
+- Docker Compose (または docker compose)
 
 ### デモの起動
 
+プロジェクトには複数のdocker-composeファイルが用意されています：
+
+#### 1. 基本版（手動計装）- Linux
+
 ```bash
-cd otel-demo
-docker-compose up -d
+# 全サービスでOpenTelemetry SDKを使用した手動計装
+docker compose up -d
+# または
+docker compose -f docker-compose.yml up -d
+```
+
+#### 2. 基本版（手動計装）- Mac
+
+```bash
+# Mac環境用（Java serviceのビルドが異なる）
+docker compose -f docker-compose-mac.yml up -d
+```
+
+#### 3. Envoyサイドカー版 - Linux
+
+```bash
+# Go serviceでEnvoyがトレーシングを担当（手動計装不要）
+docker compose -f docker-compose-envoy.yml up -d
+```
+
+#### 4. Envoyサイドカー版 - Mac
+
+```bash
+# Mac環境用のEnvoy版
+docker compose -f docker-compose-envoy-mac.yml up -d
+```
+
+#### 5. eBPF自動計装版 - Linux
+
+```bash
+# eBPFベースの自動計装（実験的）
+docker compose -f docker-compose-ebpf.yml up -d
+```
+
+#### 6. eBPF自動計装版 - Mac
+
+```bash
+# Mac環境用のeBPF版
+docker compose -f docker-compose-ebpf-mac.yml up -d
 ```
 
 ### サービスへのアクセス
+
+#### 基本版・eBPF版
 
 - **Web UI**: http://localhost
 - **Grafana**: http://localhost:3000
@@ -79,16 +155,27 @@ docker-compose up -d
 - **Grafana Tempo**: http://localhost:3200
 - **Grafana Loki**: http://localhost:3100
 
+#### Envoy版（追加ポート）
+
+上記に加えて：
+- **Envoy Proxy (Go Service経由)**: http://localhost:10000
+- **Envoy Admin**: http://localhost:9901
+
 ### デモの停止
 
 ```bash
-docker-compose down
+# 起動時に使用したファイルを指定
+docker compose down
+# または
+docker compose -f docker-compose-envoy.yml down
 ```
 
 ### 停止とクリーンアップ（ボリューム含む）
 
 ```bash
-docker-compose down -v
+docker compose down -v
+# または
+docker compose -f docker-compose-envoy.yml down -v
 ```
 
 ## 🎮 デモの使い方
@@ -207,30 +294,57 @@ curl -X POST http://localhost:8000/orders \
 ## 📁 プロジェクト構成
 
 ```
-otel-demo/
-├── python-service/       # Python FastAPI サービス
+otel-instrumentation-demo/
+├── python-service/            # Python FastAPI サービス（手動計装）
 │   ├── main.py
 │   ├── requirements.txt
 │   └── Dockerfile
-├── nodejs-service/       # Node.js Express サービス
+├── nodejs-service/            # Node.js Express サービス（手動計装）
 │   ├── index.js
+│   ├── instrumentation.js
 │   ├── package.json
 │   └── Dockerfile
-├── go-service/           # Go Gin サービス
+├── nodejs-service-envoy/      # Node.js（Envoy版 - ポート10000経由でGo接続）
+│   ├── index.js               # ← go-service:10000に接続
+│   ├── instrumentation.js
+│   ├── package.json
+│   └── Dockerfile
+├── go-service/                # Go Gin サービス（手動計装）
 │   ├── main.go
 │   ├── go.mod
 │   └── Dockerfile
-├── java-service/         # Java Spring Boot サービス
+├── go-service-ebpf/           # Go Gin サービス（手動計装なし）
+│   ├── main.go                # ← OpenTelemetry SDKなし
+│   ├── go.mod
+│   └── Dockerfile
+├── java-service/              # Java Spring Boot サービス（Linux用）
 │   ├── src/
 │   ├── pom.xml
 │   └── Dockerfile
-├── web-ui/               # Webインターフェース
+├── java-service-mac/          # Java Spring Boot サービス（Mac用）
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+├── envoy/                     # Envoy設定
+│   └── envoy-go-service.yaml  # Go service用Envoyサイドカー設定
+├── web-ui/                    # Webインターフェース
 │   └── index.html
-├── collector/            # OTLP Collector設定
+├── collector/                 # OTLP Collector設定
 │   └── otel-collector-config.yaml
-├── data/                 # SQLiteデータベース（自動作成）
-├── docker-compose.yml    # オーケストレーション
-├── prometheus.yml        # Prometheus設定
+├── grafana/                   # Grafana設定
+│   └── provisioning/
+├── tempo/                     # Tempo設定
+│   └── tempo.yaml
+├── loki/                      # Loki設定
+│   └── loki-config.yaml
+├── data/                      # SQLiteデータベース（自動作成）
+├── docker-compose.yml         # 基本版（Linux、手動計装）
+├── docker-compose-mac.yml     # 基本版（Mac）
+├── docker-compose-envoy.yml   # Envoyサイドカー版（Linux）
+├── docker-compose-envoy-mac.yml # Envoyサイドカー版（Mac）
+├── docker-compose-ebpf.yml    # eBPF自動計装版（Linux）
+├── docker-compose-ebpf-mac.yml # eBPF自動計装版（Mac）
+├── prometheus.yml             # Prometheus設定
 └── README.md
 ```
 
@@ -266,17 +380,28 @@ Collectorは以下のように設定されています:
 - trace_idを使用してログを検索し、関連エントリを見つける
 - trace_idを追跡してサービス間の問題をデバッグ
 
-### 3. メトリクス収集
+### 3. 異なるインストルメンテーション方式の比較
+- **手動計装**: OpenTelemetry SDKを使用してコード内で明示的にトレースを生成
+- **Envoyサイドカー**: アプリケーションコード変更不要でプロキシレイヤーでトレース生成
+- **eBPF**: カーネルレベルでの自動計装（実験的）
+
+### 4. Envoyサイドカーパターン
+- アプリケーションからトレーシングロジックを分離
+- サービスメッシュアーキテクチャの基礎
+- `network_mode: "service:xxx"`でコンテナ間のネットワーク名前空間を共有
+- Envoyが透過的にトレースヘッダーを伝播（W3C Trace Context）
+
+### 5. メトリクス収集
 - 各サービスがカスタムメトリクスを送信
 - Prometheusがメトリクスをスクレイプして保存
 - メトリクスをクエリしてサービスの健全性を把握
 
-### 4. データベース操作
+### 6. データベース操作
 - 各サービスは独自のSQLiteデータベースを持つ
 - データベース操作は子スパンとしてトレース
 - 正確なSQLクエリとタイミングを確認
 
-### 5. 多言語サポート
+### 7. 多言語サポート
 - OpenTelemetryは言語間で一貫して動作
 - 同じ概念（トレース、メトリクス、ログ）がどこでも適用される
 - OTLPが標準プロトコルを提供
@@ -287,48 +412,99 @@ Collectorは以下のように設定されています:
 
 ```bash
 # ログを確認
-docker-compose logs
+docker compose logs
 
 # 特定のサービスを再起動
-docker-compose restart python-service
+docker compose restart python-service
 ```
 
 ### Grafanaにトレースが表示されない
 
-1. OTLP collectorが実行中か確認: `docker-compose ps otel-collector`
-2. collectorのログを確認: `docker-compose logs otel-collector`
-3. Tempoのログを確認: `docker-compose logs tempo`
-4. サービスがcollectorに到達できるか確認: `docker-compose logs python-service | grep collector`
+1. OTLP collectorが実行中か確認: `docker compose ps otel-collector`
+2. collectorのログを確認: `docker compose logs otel-collector`
+3. Tempoのログを確認: `docker compose logs tempo`
+4. サービスがcollectorに到達できるか確認: `docker compose logs python-service | grep collector`
+
+### Envoy版でGo Serviceのトレースが見えない
+
+```bash
+# 1. Envoyが起動しているか確認
+docker compose ps envoy-go-service
+
+# 2. Envoyのログを確認
+docker compose logs envoy-go-service
+
+# 3. Envoyの統計情報を確認（トレース送信状況）
+curl http://localhost:9901/stats | grep tracing
+
+# 4. Node.jsがEnvoy経由で接続しているか確認
+docker compose exec nodejs-service cat /app/index.js | grep go-service
+# → "http://go-service:10000" になっているべき
+
+# 5. コンテナを再ビルド・再起動
+docker compose -f docker-compose-envoy.yml down
+docker compose -f docker-compose-envoy.yml build nodejs-service
+docker compose -f docker-compose-envoy.yml up -d
+```
+
+### Envoy設定の確認
+
+```bash
+# Envoyの設定をダンプ
+curl http://localhost:9901/config_dump
+
+# Envoyクラスターの状態確認
+curl http://localhost:9901/clusters
+
+# Envoyリスナーの状態確認
+curl http://localhost:9901/listeners
+```
 
 ### データベースロックエラー
 
 ```bash
 # すべてのサービスを停止
-docker-compose down
+docker compose down
 
 # データボリュームを削除
 rm -rf data/
 
 # 再起動
-docker-compose up -d
+docker compose up -d
 ```
 
 ## 🎯 次のステップ
 
-1. **コードを修正**: 新しいエンドポイントやサービスを追加してみる
-2. **スパンを追加**: ビジネスロジック用のカスタムスパンを作成
-3. **アラートを作成**: Prometheusアラートルールを設定
-4. **サンプリングを追加**: collectorでトレースサンプリングを設定
-5. **他のバックエンドを試す**: Grafana、Datadogなどにエクスポート
+1. **異なる計装方式を比較**: 手動計装版とEnvoy版のトレースを比較してみる
+2. **Envoy設定をカスタマイズ**: サンプリングレート、タイムアウトなどを調整
+3. **他のサービスにもEnvoyを追加**: Node.jsやPythonサービスにもサイドカーを追加
+4. **コードを修正**: 新しいエンドポイントやサービスを追加してみる
+5. **スパンを追加**: ビジネスロジック用のカスタムスパンを作成
+6. **アラートを作成**: Prometheusアラートルールを設定
+7. **サンプリングを追加**: collectorやEnvoyでトレースサンプリングを設定
+8. **他のバックエンドを試す**: Jaeger、Datadogなどにエクスポート
+9. **サービスメッシュを探索**: IstioやLinkerdと統合してみる
 
 ## 📚 リソース
 
+### OpenTelemetry
 - [OpenTelemetry ドキュメント](https://opentelemetry.io/docs/)
+- [OTLP 仕様](https://opentelemetry.io/docs/specs/otlp/)
+- [OpenTelemetry Python](https://opentelemetry.io/docs/languages/python/)
+- [OpenTelemetry JavaScript](https://opentelemetry.io/docs/languages/js/)
+- [OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/)
+- [OpenTelemetry Java](https://opentelemetry.io/docs/languages/java/)
+
+### Envoy Proxy
+- [Envoy Proxy ドキュメント](https://www.envoyproxy.io/docs/envoy/latest/)
+- [Envoy OpenTelemetry トレーシング](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/observability/tracing)
+- [Envoy サイドカーパターン](https://www.envoyproxy.io/docs/envoy/latest/configuration/best_practices/edge)
+
+### オブザーバビリティバックエンド
 - [Grafana Tempo ドキュメント](https://grafana.com/docs/tempo/latest/)
 - [Grafana Loki ドキュメント](https://grafana.com/docs/loki/latest/)
 - [Prometheus ドキュメント](https://prometheus.io/docs/)
 - [Grafana ドキュメント](https://grafana.com/docs/grafana/latest/)
-- [OTLP 仕様](https://opentelemetry.io/docs/specs/otlp/)
 
 ## 📝 ライセンス
 
