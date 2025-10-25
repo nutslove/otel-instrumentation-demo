@@ -1,0 +1,261 @@
+#version: '3.8'
+
+services:
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.136.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Metrics for the collector itself
+    networks:
+      - otel-network
+
+  # Grafana Tempo - Distributed Tracing Backend
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo API
+      - "4319:4319"   # OTLP gRPC receiver (Changed to avoid conflict with OTEL Collector from default 4317)
+      - "4320:4320"   # OTLP HTTP receiver（Changed to avoid conflict with OTEL Collector from default 4318)
+    networks:
+      - otel-network
+
+  # Grafana Loki - Log Aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - otel-network
+
+  # Prometheus - Metrics Backend
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--enable-feature=exemplar-storage'
+      - '--web.enable-remote-write-receiver'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - otel-network
+
+  # Grafana - Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - otel-network
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+
+  # Python FastAPI Service - Order Management
+  python-service:
+    build:
+      context: ./python-service
+      dockerfile: Dockerfile
+      no_cache: true
+    container_name: python-service
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=python-fastapi-service
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_TRACES_SAMPLER=always_on
+      # - OTEL_METRICS_EXEMPLAR_FILTER=trace_based
+      - OTEL_METRICS_EXEMPLAR_FILTER=always_on
+      - OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
+      - OTEL_PYTHON_LOG_CORRELATION=true
+      - OTEL_PYTHON_LOG_FORMAT=%(asctime)s [%(levelname)s] trace_id=%(otelTraceID)s span_id=%(otelSpanID)s - %(message)s
+    ports:
+      - "8000:8000"
+      - "8188:8080"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - otel-collector
+      - loki
+    networks:
+      - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=python-service,job=docker"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node.js Express Service - Inventory Management (Envoy version)
+  nodejs-service:
+    build:
+      context: ./nodejs-service-envoy
+      dockerfile: Dockerfile
+      no_cache: true
+    container_name: nodejs-service
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_SERVICE_NAME=nodejs-express-service
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_LOGS_EXPORTER=otlp
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - otel-collector
+      - loki
+    networks:
+      - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=nodejs-service,job=docker"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Go Gin Service - Pricing Calculation (No manual instrumentation - Envoy will handle tracing)
+  go-service:
+    image: go-service-envoy:latest
+    build:
+      context: ./go-service-ebpf
+      dockerfile: Dockerfile
+      no_cache: true
+    container_name: go-service
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:14317
+    ports:
+      - "8080:8080"   # go-service直接アクセス用（オプション）
+      - "10000:10000" # Envoy ingress（メインエントリーポイント）
+      - "9901:9901"   # Envoy admin
+    volumes:
+      - ./data:/data
+    depends_on:
+      - otel-collector
+      - loki
+    networks:
+      - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=go-service,job=docker"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Envoy Sidecar for Go Service
+  envoy-go-service:
+    image: envoyproxy/envoy:v1.36-latest
+    container_name: envoy-go-service
+    network_mode: "service:go-service"  # go-serviceと同じネットワーク名前空間を共有（サイドカーパターン）
+    volumes:
+      - ./envoy/envoy-go-service.yaml:/etc/envoy/envoy.yaml:ro
+    command: ["-c", "/etc/envoy/envoy.yaml"]
+    depends_on:
+      - go-service
+
+  # Java Spring Boot Service - Notification Service
+  java-service:
+    build:
+      context: ./java-service
+      dockerfile: Dockerfile
+      no_cache: true
+    container_name: java-service
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=java-spring-boot-service # metricではこれが`job`ラベルの値になる
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      # - OTEL_METRICS_EXPORTER=otlp
+      # - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_METRICS_EXEMPLAR_FILTER=always_on
+      - SPRING_DATASOURCE_URL=jdbc:sqlite:/data/notifications.db
+    ports:
+      - "8081:8081"
+      - "9464:9464"  # OpenTelemetry Java AgentのPrometheusエクスポーター用ポート
+    volumes:
+      - ./data:/data
+    depends_on:
+      - otel-collector
+      - loki
+    networks:
+      - otel-network
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "service=java-service,job=docker"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Web UI
+  web-ui:
+    image: nginx:alpine
+    container_name: web-ui
+    volumes:
+      - ./web-ui:/usr/share/nginx/html:ro
+    ports:
+      - "80:80"
+    networks:
+      - otel-network
+    depends_on:
+      - python-service
+      - nodejs-service
+      - go-service
+      - java-service
+
+networks:
+  otel-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  tempo-data:
+  loki-data:
+  grafana-data:
