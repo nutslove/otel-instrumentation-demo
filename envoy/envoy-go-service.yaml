@@ -19,6 +19,20 @@ static_resources:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           stat_prefix: ingress_http
           codec_type: AUTO
+          # トレーシング設定
+          tracing:
+            provider:
+              name: envoy.tracers.opentelemetry
+              typed_config:
+                "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                grpc_service:
+                  envoy_grpc:
+                    cluster_name: otel_collector_cluster
+                  timeout: 0.250s
+                service_name: go-service-envoy
+            random_sampling:
+              value: 100.0  # 100%サンプリング（テスト用）
+          generate_request_id: true
           route_config:
             name: local_route
             virtual_hosts:
@@ -29,6 +43,8 @@ static_resources:
                   prefix: "/"
                 route:
                   cluster: go_service_cluster
+                decorator:
+                  operation: go_service_operation
           http_filters:
           - name: envoy.filters.http.router
             typed_config:
@@ -83,7 +99,11 @@ static_resources:
     connect_timeout: 0.25s
     type: STRICT_DNS
     lb_policy: ROUND_ROBIN
-    http2_protocol_options: {}  # gRPCのためにHTTP/2を有効化
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http2_protocol_options: {}  # gRPCのためにHTTP/2を有効化
     load_assignment:
       cluster_name: otel_collector_cluster
       endpoints:
