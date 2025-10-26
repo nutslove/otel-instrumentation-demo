@@ -88,11 +88,16 @@ services:
       no_cache: true
     container_name: python-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://adot-collector:4317
+      - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://adot-collector:4317
+      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://adot-collector:4317
+      - OTEL_PYTHON_DISTRO="aws_distro"
+      - OTEL_PYTHON_CONFIGURATOR="aws_configurator"
       - OTEL_SERVICE_NAME=python-fastapi-service
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
       - OTEL_TRACES_SAMPLER=always_on
       # - OTEL_METRICS_EXEMPLAR_FILTER=trace_based
       - OTEL_METRICS_EXEMPLAR_FILTER=always_on
@@ -128,12 +133,14 @@ services:
       no_cache: true
     container_name: nodejs-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
-      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-      - OTEL_SERVICE_NAME=nodejs-express-service
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://adot-collector:4317
+      - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://adot-collector:4317
+      - OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://adot-collector:4317
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_SERVICE_NAME=nodejs-express-service
     ports:
       - "3001:3000"
     volumes:
@@ -215,12 +222,13 @@ services:
       no_cache: true
     container_name: java-service
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://adot-collector:4317
+      - OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://adot-collector:4317
       - OTEL_SERVICE_NAME=java-spring-boot-service # metricではこれが`job`ラベルの値になる
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=prometheus
       # - OTEL_METRICS_EXPORTER=otlp
-      # - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_LOGS_EXPORTER=otlp
       - OTEL_METRICS_EXEMPLAR_FILTER=always_on
       - SPRING_DATASOURCE_URL=jdbc:sqlite:/data/notifications.db
     ports:
