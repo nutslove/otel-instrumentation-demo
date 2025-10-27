@@ -454,8 +454,10 @@ aws application-autoscaling put-scaling-policy \
 
 ## クリーンアップ
 
+リソースを削除する際は、以下の順序で実行してください:
+
 ```bash
-# ECS Serviceの削除
+# 1. ECS Serviceの削除
 aws ecs update-service \
   --cluster ${ECS_CLUSTER_NAME} \
   --service otel-demo-service \
@@ -468,28 +470,126 @@ aws ecs delete-service \
   --force \
   --region ${AWS_REGION}
 
-# Task Definitionの登録解除
-aws ecs deregister-task-definition \
-  --task-definition otel-demo-app:1 \
-  --region ${AWS_REGION}
+# 2. Task Definitionの登録解除（全リビジョン）
+for revision in $(aws ecs list-task-definitions --family-prefix otel-demo-app --region ${AWS_REGION} --query 'taskDefinitionArns[]' --output text); do
+  aws ecs deregister-task-definition --task-definition ${revision} --region ${AWS_REGION}
+done
 
-# ECS Clusterの削除
+# 3. ECS Clusterの削除
 aws ecs delete-cluster \
   --cluster ${ECS_CLUSTER_NAME} \
   --region ${AWS_REGION}
 
-# ECRリポジトリの削除
+# 4. CloudWatch Logsのロググループ削除
+aws logs delete-log-group \
+  --log-group-name /ecs/otel-demo-app \
+  --region ${AWS_REGION}
+
+# 5. ECRリポジトリの削除
 aws ecr delete-repository \
-  --repository-name otel-demo-python \
+  --repository-name otel-demo \
   --force \
   --region ${AWS_REGION}
 
-# 同様に他のリポジトリも削除...
+# 6. IAMロールの削除（必要に応じて）
+# ポリシーのデタッチ
+aws iam detach-role-policy \
+  --role-name ecsTaskExecutionRole \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+aws iam detach-role-policy \
+  --role-name ecsTaskExecutionRole \
+  --policy-arn arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+
+aws iam detach-role-policy \
+  --role-name ecsTaskRole \
+  --policy-arn arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+
+aws iam detach-role-policy \
+  --role-name ecsTaskRole \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+# ロールの削除
+aws iam delete-role --role-name ecsTaskExecutionRole
+aws iam delete-role --role-name ecsTaskRole
 ```
+
+## 補足情報
+
+### Fluent Bit の設定ファイルについて
+
+このデプロイメントでは、カスタムFluent Bit設定ファイル（`ADOT/fluent-bit-custom/custom-fluent-bit.conf`）を使用しています:
+
+**INPUT**:
+- `forward` (24224): FireLensからコンテナログを受信
+- `opentelemetry` (4317): OTLP gRPCトレース/メトリクスを受信
+- `opentelemetry` (4318): OTLP HTTPトレース/メトリクスを受信
+
+**FILTER**:
+- `aws`: ECSメタデータを自動付与
+- `modify`: カスタムラベルの追加
+
+**OUTPUT**:
+- `loki`: コンテナログをLokiに送信
+- `opentelemetry`: トレースをTempoに送信（OTLP HTTP形式）
+- `prometheus_remote_write`: メトリクスをPrometheus Remote Write対応エンドポイントに送信
+- `cloudwatch_logs`: CloudWatch Logsにバックアップ
+
+### 各サービスのOpenTelemetry設定
+
+#### Python FastAPI Service
+- **SDK**: AWS Distro for OpenTelemetry Python
+- **自動計装**: `opentelemetry-instrument`コマンドで起動
+- **エクスポーター**: OTLP gRPC
+- **特徴**: ログ自動計装とログコリレーション有効
+
+#### Node.js Express Service
+- **SDK**: OpenTelemetry JS
+- **自動計装**: `@opentelemetry/auto-instrumentations-node`
+- **エクスポーター**: OTLP gRPC
+- **特徴**: Express、HTTP、その他の自動計装
+
+#### Go Gin Service
+- **SDK**: OpenTelemetry Go
+- **計装方式**: 手動計装
+- **エクスポーター**: OTLP gRPC
+- **特徴**: Ginフレームワークのミドルウェア使用
+
+#### Java Spring Boot Service
+- **SDK**: OpenTelemetry Java Agent
+- **自動計装**: `-javaagent`オプションで起動
+- **エクスポーター**: OTLP gRPC (トレース/ログ) + Prometheus (メトリクス)
+- **特徴**: Exemplar対応、Prometheusメトリクスを9464ポートで直接公開
+
+### ローカル開発との違い
+
+このECSデプロイメントは、`docker-compose.yml`のローカル環境と以下の点で異なります:
+
+1. **テレメトリーコレクター**:
+   - ローカル: ADOT Collector
+   - ECS: AWS for Fluent Bit 3.0.0 (FireLens統合)
+
+2. **ログ収集**:
+   - ローカル: Docker Loki Driver
+   - ECS: FireLens (Fluent Bit) → Loki + CloudWatch Logs
+
+3. **ネットワーク**:
+   - ローカル: Docker Bridge Network
+   - ECS: AWS VPC (awsvpc mode)
+
+4. **サービス間通信**:
+   - ローカル: サービス名でDNS解決
+   - ECS: localhost通信（同一Task内）
 
 ## 参考資料
 
 - [AWS for Fluent Bit](https://github.com/aws/aws-for-fluent-bit)
 - [Fluent Bit Documentation](https://docs.fluentbit.io/)
 - [AWS ECS Documentation](https://docs.aws.amazon.com/ecs/)
+- [AWS ECS FireLens](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html)
 - [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
+- [AWS Distro for OpenTelemetry](https://aws-otel.github.io/)
+- [OpenTelemetry Python](https://opentelemetry-python.readthedocs.io/)
+- [OpenTelemetry JavaScript](https://opentelemetry.io/docs/languages/js/)
+- [OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/)
+- [OpenTelemetry Java](https://opentelemetry.io/docs/languages/java/)

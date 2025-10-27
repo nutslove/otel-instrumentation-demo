@@ -50,6 +50,19 @@ type PricingResponse struct {
 }
 
 func initTelemetry(ctx context.Context) (func(), error) {
+	// Get OTLP endpoint from environment variable
+	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otlpEndpoint == "" {
+		otlpEndpoint = "localhost:4317" // Default fallback
+	}
+	// Remove http:// or https:// prefix if present
+	otlpEndpoint = fmt.Sprintf("%s", otlpEndpoint)
+	if len(otlpEndpoint) > 7 && otlpEndpoint[:7] == "http://" {
+		otlpEndpoint = otlpEndpoint[7:]
+	} else if len(otlpEndpoint) > 8 && otlpEndpoint[:8] == "https://" {
+		otlpEndpoint = otlpEndpoint[8:]
+	}
+
 	// Resource
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -63,7 +76,7 @@ func initTelemetry(ctx context.Context) (func(), error) {
 
 	// Trace exporter
 	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint("adot-collector:4317"),
+		otlptracegrpc.WithEndpoint(otlpEndpoint),
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
@@ -81,7 +94,7 @@ func initTelemetry(ctx context.Context) (func(), error) {
 
 	// Metrics exporter
 	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint("adot-collector:4317"),
+		otlpmetricgrpc.WithEndpoint(otlpEndpoint),
 		otlpmetricgrpc.WithInsecure(),
 	)
 	if err != nil {
@@ -97,7 +110,7 @@ func initTelemetry(ctx context.Context) (func(), error) {
 
 	// Log exporter
 	logExporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint("adot-collector:4317"),
+		otlploggrpc.WithEndpoint(otlpEndpoint),
 		otlploggrpc.WithInsecure(),
 	)
 	if err != nil {

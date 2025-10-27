@@ -42,7 +42,8 @@
         "options": {
           "awslogs-group": "/ecs/otel-demo-app",
           "awslogs-region": "ap-northeast-1",
-          "awslogs-stream-prefix": "fluent-bit"
+          "awslogs-stream-prefix": "fluent-bit",
+          "awslogs-create-group": "true"
         }
       },
       "environment": [
@@ -61,6 +62,10 @@
         {
           "name": "AWS_REGION",
           "value": "ap-northeast-1"
+        },
+        {
+          "name": "ECS_CLUSTER",
+          "value": "otel-demo-cluster"
         }
       ]
     },
