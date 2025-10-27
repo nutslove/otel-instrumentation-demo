@@ -89,6 +89,8 @@ services:
     container_name: python-service
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://adot-collector:4317
+      - OTEL_PYTHON_DISTRO=aws_distro
+      - OTEL_PYTHON_CONFIGURATOR=aws_configurator
       - OTEL_SERVICE_NAME=python-fastapi-service
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
