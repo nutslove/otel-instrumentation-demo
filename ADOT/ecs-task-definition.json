@@ -341,6 +341,36 @@
         "retries": 3,
         "startPeriod": 60
       }
+    },
+    {
+      "name": "web-ui",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:web-ui",
+      "essential": true,
+      "cpu": 256,
+      "memory": 512,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp",
+          "name": "web-ui-http"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/otel-demo-app",
+          "awslogs-region": "ap-northeast-1",
+          "awslogs-stream-prefix": "web-ui",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --spider -q http://localhost:80/ || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 30
+      }
     }
   ]
 }
