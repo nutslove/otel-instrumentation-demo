@@ -1,0 +1,341 @@
+{
+  "family": "otel-demo-app",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "fluent-bit",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:fluent-bit",
+      "essential": true,
+      "cpu": 512,
+      "memory": 1024,
+      "firelensConfiguration": {
+        "type": "fluentbit",
+        "options": {
+          "config-file-type": "file",
+          "config-file-value": "/custom-fluent-bit.conf"
+        }
+      },
+      "portMappings": [
+        {
+          "containerPort": 4317,
+          "protocol": "tcp",
+          "name": "otlp-grpc"
+        },
+        {
+          "containerPort": 4318,
+          "protocol": "tcp",
+          "name": "otlp-http"
+        },
+        {
+          "containerPort": 24224,
+          "protocol": "tcp",
+          "name": "forward"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/otel-demo-app",
+          "awslogs-region": "ap-northeast-1",
+          "awslogs-stream-prefix": "fluent-bit"
+        }
+      },
+      "environment": [
+        {
+          "name": "LOKI_ENDPOINT",
+          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
+        },
+        {
+          "name": "TEMPO_ENDPOINT",
+          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
+        },
+        {
+          "name": "THANOS_ENDPOINT",
+          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "ap-northeast-1"
+        }
+      ]
+    },
+    {
+      "name": "python-service",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:python",
+      "essential": true,
+      "cpu": 256,
+      "memory": 512,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp",
+          "name": "python-http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_PYTHON_DISTRO",
+          "value": "aws_distro"
+        },
+        {
+          "name": "OTEL_PYTHON_CONFIGURATOR",
+          "value": "aws_configurator"
+        },
+        {
+          "name": "OTEL_SERVICE_NAME",
+          "value": "python-fastapi-service"
+        },
+        {
+          "name": "OTEL_TRACES_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_METRICS_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_LOGS_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+          "value": "grpc"
+        },
+        {
+          "name": "OTEL_TRACES_SAMPLER",
+          "value": "always_on"
+        },
+        {
+          "name": "OTEL_METRICS_EXEMPLAR_FILTER",
+          "value": "always_on"
+        },
+        {
+          "name": "OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED",
+          "value": "true"
+        },
+        {
+          "name": "OTEL_PYTHON_LOG_CORRELATION",
+          "value": "true"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awsfirelens",
+        "options": {
+          "Name": "forward",
+          "Host": "localhost",
+          "Port": "24224"
+        }
+      },
+      "dependsOn": [
+        {
+          "containerName": "fluent-bit",
+          "condition": "START"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    },
+    {
+      "name": "nodejs-service",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:nodejs",
+      "essential": true,
+      "cpu": 256,
+      "memory": 512,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp",
+          "name": "nodejs-http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_TRACES_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_METRICS_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_LOGS_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+          "value": "grpc"
+        },
+        {
+          "name": "OTEL_SERVICE_NAME",
+          "value": "nodejs-express-service"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awsfirelens",
+        "options": {
+          "Name": "forward",
+          "Host": "localhost",
+          "Port": "24224"
+        }
+      },
+      "dependsOn": [
+        {
+          "containerName": "fluent-bit",
+          "condition": "START"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    },
+    {
+      "name": "go-service",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:go",
+      "essential": true,
+      "cpu": 256,
+      "memory": 512,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp",
+          "name": "go-http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+          "value": "http://localhost:4317"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awsfirelens",
+        "options": {
+          "Name": "forward",
+          "Host": "localhost",
+          "Port": "24224"
+        }
+      },
+      "dependsOn": [
+        {
+          "containerName": "fluent-bit",
+          "condition": "START"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --spider -q http://localhost:8080/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    },
+    {
+      "name": "java-service",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:java",
+      "essential": true,
+      "cpu": 512,
+      "memory": 1024,
+      "portMappings": [
+        {
+          "containerPort": 8081,
+          "protocol": "tcp",
+          "name": "java-http"
+        },
+        {
+          "containerPort": 9464,
+          "protocol": "tcp",
+          "name": "java-metrics"
+        }
+      ],
+      "environment": [
+        {
+          "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+          "value": "http://localhost:4317"
+        },
+        {
+          "name": "OTEL_SERVICE_NAME",
+          "value": "java-spring-boot-service"
+        },
+        {
+          "name": "OTEL_TRACES_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_METRICS_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_LOGS_EXPORTER",
+          "value": "otlp"
+        },
+        {
+          "name": "OTEL_METRICS_EXEMPLAR_FILTER",
+          "value": "always_on"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awsfirelens",
+        "options": {
+          "Name": "forward",
+          "Host": "localhost",
+          "Port": "24224"
+        }
+      },
+      "dependsOn": [
+        {
+          "containerName": "fluent-bit",
+          "condition": "START"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}
