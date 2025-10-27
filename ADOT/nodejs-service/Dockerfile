@@ -13,6 +13,4 @@ RUN mkdir -p /data
 EXPOSE 3000
 
 # Use OpenTelemetry automatic instrumentation
-# CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "index.js"]
-# CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "index.js"]
-CMD ["node", "--require", "./instrumentation.js", "index.js"]
+CMD ["node", "--require", "@aws/aws-distro-opentelemetry-node-autoinstrumentation/register", "index.js"]

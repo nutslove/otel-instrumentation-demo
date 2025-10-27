@@ -13,7 +13,7 @@ FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 # Download ADOT Java agent for auto-instrumentation
-ADD https://github.com/aws-observability/aws-otel-java-instrumentation/releases/download/v2.2.0/aws-opentelemetry-agent.jar /app/aws-opentelemetry-agent.jar
+ADD https://github.com/aws-observability/aws-otel-java-instrumentation/releases/download/v2.11.5/aws-opentelemetry-agent.jar /app/aws-opentelemetry-agent.jar
 
 COPY --from=builder /app/target/*.jar app.jar
 

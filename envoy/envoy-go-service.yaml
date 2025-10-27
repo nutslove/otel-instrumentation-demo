@@ -1,0 +1,174 @@
+admin:
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901
+
+static_resources:
+  listeners:
+  # Inbound listener - 外部からのリクエストをgo-serviceに転送
+  - name: listener_0
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10000
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          # トレーシング設定
+          tracing:
+            provider:
+              name: envoy.tracers.opentelemetry
+              typed_config:
+                "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                grpc_service:
+                  envoy_grpc:
+                    cluster_name: otel_collector_cluster
+                  timeout: 0.250s
+                service_name: go-service-envoy
+            random_sampling:
+              value: 100.0  # 100%サンプリング（テスト用）
+          generate_request_id: true
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: go_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: go_service_cluster
+                decorator:
+                  operation: go_service_operation
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  # Outbound listener - go-serviceから外部（otel-collector）への通信
+  - name: otel_collector_listener
+    address:
+      socket_address:
+        address: 127.0.0.1
+        port_value: 14317
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: egress_otel
+          codec_type: AUTO
+          route_config:
+            name: otel_route
+            virtual_hosts:
+            - name: otel_collector
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: otel_collector_cluster
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  # Outbound listener - go-serviceからjava-serviceへの通信（Envoy egress検証用）
+  - name: java_service_listener
+    address:
+      socket_address:
+        address: 127.0.0.1
+        port_value: 14318
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: egress_java
+          codec_type: AUTO
+          # Egressトラフィックでもトレーシング設定を追加
+          tracing:
+            provider:
+              name: envoy.tracers.opentelemetry
+              typed_config:
+                "@type": type.googleapis.com/envoy.config.trace.v3.OpenTelemetryConfig
+                grpc_service:
+                  envoy_grpc:
+                    cluster_name: otel_collector_cluster
+                  timeout: 0.250s
+                service_name: go-service-envoy-egress
+            random_sampling:
+              value: 100.0
+          generate_request_id: true
+          route_config:
+            name: java_route
+            virtual_hosts:
+            - name: java_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: java_service_cluster
+                decorator:
+                  operation: java_service_call
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+  # go-service cluster (localhost:8080 - same network namespace)
+  - name: go_service_cluster
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: go_service_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 8080
+
+  # otel-collector cluster
+  - name: otel_collector_cluster
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http2_protocol_options: {}  # gRPCのためにHTTP/2を有効化
+    load_assignment:
+      cluster_name: otel_collector_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: otel-collector
+                port_value: 4317
+
+  # java-service cluster（Envoy egress検証用）
+  - name: java_service_cluster
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: java_service_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: java-service
+                port_value: 8081
