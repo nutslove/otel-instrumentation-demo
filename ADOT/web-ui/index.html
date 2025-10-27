@@ -174,15 +174,6 @@
             overflow-y: auto;
         }
 
-        .trace-id {
-            background: #fef3c7;
-            padding: 8px 12px;
-            border-radius: 6px;
-            margin-top: 10px;
-            font-weight: bold;
-            word-break: break-all;
-            border-left: 4px solid #f59e0b;
-        }
 
         .main-action {
             background: white;
@@ -236,10 +227,10 @@
 <body>
     <div class="container">
         <h1>🔭 OpenTelemetry Microservices Demo</h1>
-        <p class="subtitle">Distributed Tracing, Metrics, and Logs with Trace ID Correlation</p>
+        <p class="subtitle">Distributed Tracing, Metrics, and Logs Across Microservices</p>
 
         <div class="links">
-            <a href="http://localhost:3000" target="_blank">📊 Grafana (Observability)</a>
+            <a href="https://grafana.dev-sutta.kinto-technologies.info" target="_blank">📊 Grafana (Observability)</a>
         </div>
 
         <div class="workflow-diagram">
@@ -256,14 +247,14 @@
                 <div class="flow-item">Java (Spring Boot)<br/>Notifications</div>
             </div>
             <p style="text-align: center; margin-top: 15px; color: #666;">
-                All services emit traces, metrics, and logs with correlated trace IDs to OTLP Collector
+                All services emit traces, metrics, and logs to OTLP Collector
             </p>
         </div>
 
         <div class="main-action">
             <h2>🛒 Create Order (Full Workflow)</h2>
             <p style="color: #666; margin-bottom: 20px;">
-                This will trigger all microservices and demonstrate distributed tracing across Python → Node.js → Go → Java
+                This will trigger all microservices: Python (orders) → Node.js (inventory) → Go (pricing + notification) → Java (notification)
             </p>
             <div class="form-group">
                 <label for="userId">User ID</label>
@@ -383,10 +374,10 @@
 
     <script>
         const services = {
-            python: 'http://localhost:8000',
-            nodejs: 'http://localhost:3001',
-            go: 'http://localhost:8080',
-            java: 'http://localhost:8081'
+            python: 'https://otel.sutta.kinto-technologies.info:8000',
+            nodejs: 'https://otel.sutta.kinto-technologies.info:3000',
+            go: 'https://otel.sutta.kinto-technologies.info:8080',
+            java: 'https://otel.sutta.kinto-technologies.info:8081'
         };
 
         async function checkService(service) {
@@ -424,7 +415,8 @@
                 });
                 const orderData = await orderResponse.json();
 
-                // Step 2: Reserve inventory (Node.js → Go)
+                // Step 2: Reserve inventory (Node.js → Go → Java)
+                // Node.js checks inventory, Go calculates pricing and sends notification to Java
                 const reserveResponse = await fetch(`${services.nodejs}/inventory/reserve`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -435,36 +427,20 @@
                 });
                 const reserveData = await reserveResponse.json();
 
-                // Step 3: Send notification (Java)
-                const notificationResponse = await fetch(`${services.java}/notifications/send`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        recipient: `user_${userId}@example.com`,
-                        message: `Your order for ${quantity}x ${productName} has been placed successfully!`,
-                        type: 'email'
-                    })
-                });
-                const notificationData = await notificationResponse.json();
-
                 resultEl.innerHTML = `
                     ✅ <strong>Order Workflow Completed!</strong><br/><br/>
                     <strong>Step 1 - Order Created (Python):</strong><br/>
                     Order ID: ${orderData.order_id}<br/>
                     Status: ${orderData.status}<br/>
                     Inventory Available: ${orderData.inventory_check.available}<br/>
-                    <div class="trace-id">🔍 Trace ID: ${orderData.trace_id}</div>
                     <br/>
-                    <strong>Step 2 - Inventory Reserved (Node.js → Go):</strong><br/>
+                    <strong>Step 2 - Inventory Reserved & Price Calculated (Node.js → Go → Java):</strong><br/>
                     Reserved: ${reserveData.reserved}<br/>
                     Total Price: $${reserveData.pricing?.total_price || 'N/A'}<br/>
-                    <br/>
-                    <strong>Step 3 - Notification Sent (Java):</strong><br/>
-                    Recipient: ${notificationData.recipient}<br/>
-                    Status: ${notificationData.status}<br/>
+                    Note: Go service automatically sends notification to Java service<br/>
                     <br/>
                     <strong>📊 View in Grafana:</strong><br/>
-                    Open <a href="http://localhost:3000/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22query%22:%22${orderData.trace_id}%22%7D%5D%7D" target="_blank" style="color: #667eea;">Grafana Tempo</a> to see the full distributed trace across all services!
+                    Open <a href="https://grafana.dev-sutta.kinto-technologies.info/explore" target="_blank" style="color: #667eea;">Grafana Tempo</a> to see the full distributed trace across all services!
                 `;
             } catch (error) {
                 resultEl.innerHTML = `❌ Error: ${error.message}`;
@@ -482,7 +458,6 @@
                 resultEl.innerHTML = `
                     <strong>Orders (${data.orders.length}):</strong><br/>
                     ${JSON.stringify(data.orders.slice(0, 3), null, 2)}
-                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
                 `;
             } catch (error) {
                 resultEl.innerHTML = `❌ Error: ${error.message}`;
@@ -500,7 +475,6 @@
                 resultEl.innerHTML = `
                     <strong>Inventory:</strong><br/>
                     ${JSON.stringify(data.inventory, null, 2)}
-                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
                 `;
             } catch (error) {
                 resultEl.innerHTML = `❌ Error: ${error.message}`;
@@ -518,7 +492,6 @@
                 resultEl.innerHTML = `
                     <strong>Pricing:</strong><br/>
                     ${JSON.stringify(data.pricing, null, 2)}
-                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
                 `;
             } catch (error) {
                 resultEl.innerHTML = `❌ Error: ${error.message}`;
@@ -536,7 +509,6 @@
                 resultEl.innerHTML = `
                     <strong>Notifications (${data.notifications.length}):</strong><br/>
                     ${JSON.stringify(data.notifications.slice(0, 3), null, 2)}
-                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
                 `;
             } catch (error) {
                 resultEl.innerHTML = `❌ Error: ${error.message}`;
@@ -569,15 +541,13 @@
                     <strong>This error propagated through ALL services:</strong><br/>
                     1. 🐍 Python (Order Service) - initiated error workflow<br/>
                     2. 📦 Node.js (Inventory) - checked inventory<br/>
-                    3. 🔷 Go (Pricing) - calculated pricing with error<br/>
-                    4. ☕ Java (Notifications) - sent error notification<br/>
-                    <br/>
-                    <div class="trace-id">🔍 Trace ID: ${data.trace_id}</div>
+                    3. 🔷 Go (Pricing) - calculated pricing with error and automatically sent notification to Java<br/>
+                    4. ☕ Java (Notifications) - received error notification from Go<br/>
                     <br/>
                     <strong>📊 View in Grafana:</strong><br/>
-                    Open <a href="http://localhost:3000/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22query%22:%22${data.trace_id}%22%7D%5D%7D" target="_blank" style="color: #667eea;">Grafana Tempo</a>
+                    Open <a href="https://grafana.dev-sutta.kinto-technologies.info/explore" target="_blank" style="color: #667eea;">Grafana Tempo</a>
                     to see how the error propagated through the entire distributed system!<br/>
-                    You'll see error logs and spans across all 4 services with the same trace ID.
+                    You'll see error logs and spans across all 4 services.
                     <br/><br/>
                     <strong>Error Details:</strong><br/>
                     ${JSON.stringify(data, null, 2)}
@@ -589,7 +559,7 @@
                     <br/>
                     <strong>📊 Check Grafana:</strong><br/>
                     The error has been recorded. Check
-                    <a href="http://localhost:3000/explore?datasource=tempo" target="_blank" style="color: #667eea;">Grafana Tempo</a>
+                    <a href="https://grafana.dev-sutta.kinto-technologies.info/explore?datasource=tempo-otel-demo" target="_blank" style="color: #667eea;">Grafana Tempo</a>
                     for recent traces with errors.
                 `;
             }
