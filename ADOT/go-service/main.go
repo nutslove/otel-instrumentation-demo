@@ -137,27 +137,6 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	return cleanup, nil
 }
 
-func emitLog(ctx context.Context, severity otlog.Severity, message string, attrs ...attribute.KeyValue) {
-	span := trace.SpanFromContext(ctx)
-	spanCtx := span.SpanContext()
-
-	// Convert attribute.KeyValue to otlog.KeyValue
-	logAttrs := make([]otlog.KeyValue, len(attrs)+2)
-	for i, attr := range attrs {
-		logAttrs[i] = otlog.String(string(attr.Key), attr.Value.AsString())
-	}
-	logAttrs[len(attrs)] = otlog.String("trace_id", spanCtx.TraceID().String())
-	logAttrs[len(attrs)+1] = otlog.String("span_id", spanCtx.SpanID().String())
-
-	var record otlog.Record
-	record.SetTimestamp(time.Now())
-	record.SetSeverity(severity)
-	record.SetBody(otlog.StringValue(message))
-	record.AddAttributes(logAttrs...)
-
-	logger.Emit(ctx, record)
-}
-
 func initDB() error {
 	var err error
 	db, err = sql.Open("sqlite3", "/data/pricing.db")
@@ -224,7 +203,7 @@ func main() {
 		span := trace.SpanFromContext(ctx)
 		traceID := span.SpanContext().TraceID().String()
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Go service root endpoint called - trace_id: %s", traceID))
+		log.Printf("Go service root endpoint called - trace_id: %s", traceID)
 
 		c.JSON(http.StatusOK, gin.H{
 			"service": "go-gin",
@@ -239,15 +218,12 @@ func main() {
 
 		var req PricingRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Invalid request: %v - trace_id: %s", err, traceID))
+			log.Printf("Invalid request: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Calculating pricing for %s - trace_id: %s", req.ProductName, traceID),
-			attribute.String("product.name", req.ProductName),
-			attribute.Int("quantity", req.Quantity),
-		)
+		log.Printf("Calculating pricing for %s (quantity: %d) - trace_id: %s", req.ProductName, req.Quantity, traceID)
 
 		// Database query with span
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_pricing",
@@ -263,17 +239,14 @@ func main() {
 		dbSpan.End()
 
 		if err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
+			log.Printf("Database error: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 			return
 		}
 
 		totalPrice := unitPrice * float64(req.Quantity)
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Pricing calculated: %.2f - trace_id: %s", totalPrice, traceID),
-			attribute.Float64("unit.price", unitPrice),
-			attribute.Float64("total.price", totalPrice),
-		)
+		log.Printf("Pricing calculated: %.2f (unit_price: %.2f) - trace_id: %s", totalPrice, unitPrice, traceID)
 
 		c.JSON(http.StatusOK, PricingResponse{
 			ProductName: req.ProductName,
@@ -288,7 +261,7 @@ func main() {
 		span := trace.SpanFromContext(ctx)
 		traceID := span.SpanContext().TraceID().String()
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Fetching all pricing - trace_id: %s", traceID))
+		log.Printf("Fetching all pricing - trace_id: %s", traceID)
 
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_all_pricing",
 			trace.WithAttributes(
@@ -301,7 +274,7 @@ func main() {
 		dbSpan.End()
 
 		if err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
+			log.Printf("Database error: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -322,7 +295,7 @@ func main() {
 			})
 		}
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Retrieved %d pricing items - trace_id: %s", len(pricing), traceID))
+		log.Printf("Retrieved %d pricing items - trace_id: %s", len(pricing), traceID)
 
 		c.JSON(http.StatusOK, gin.H{
 			"pricing": pricing,
@@ -338,7 +311,7 @@ func main() {
 		span := trace.SpanFromContext(ctx)
 		traceID := span.SpanContext().TraceID().String()
 
-		emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Intentional error triggered - trace_id: %s", traceID))
+		log.Printf("ERROR: Intentional error triggered - trace_id: %s", traceID)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Intentional error for testing",
@@ -352,15 +325,12 @@ func main() {
 
 		var req PricingRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Invalid request: %v - trace_id: %s", err, traceID))
+			log.Printf("ERROR: Invalid request: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Intentional pricing error for %s - trace_id: %s", req.ProductName, traceID),
-			attribute.String("product.name", req.ProductName),
-			attribute.Int("quantity", req.Quantity),
-		)
+		log.Printf("ERROR: Intentional pricing error for %s (quantity: %d) - trace_id: %s", req.ProductName, req.Quantity, traceID)
 
 		// Simulate pricing calculation but return error
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_pricing_error",
@@ -376,14 +346,14 @@ func main() {
 		dbSpan.End()
 
 		if err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
+			log.Printf("ERROR: Database error: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 			return
 		}
 
 		totalPrice := unitPrice * float64(req.Quantity)
 
-		emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Pricing calculation error (intentional): %.2f - trace_id: %s", totalPrice, traceID))
+		log.Printf("ERROR: Pricing calculation error (intentional): %.2f - trace_id: %s", totalPrice, traceID)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":        "Intentional pricing calculation error",
