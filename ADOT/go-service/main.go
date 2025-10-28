@@ -16,25 +16,18 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel/log/global"
-	otlog "go.opentelemetry.io/otel/log"
 )
 
 var (
 	db     *sql.DB
 	tracer trace.Tracer
-	logger otlog.Logger
 )
 
 type PricingRequest struct {
@@ -63,6 +56,8 @@ func initTelemetry(ctx context.Context) (func(), error) {
 		otlpEndpoint = otlpEndpoint[8:]
 	}
 
+	log.Printf("Initializing OpenTelemetry with endpoint: %s", otlpEndpoint)
+
 	// Resource
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -80,8 +75,10 @@ func initTelemetry(ctx context.Context) (func(), error) {
 		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
+		log.Printf("Failed to create trace exporter: %v", err)
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
+	log.Printf("OTLP trace exporter initialized successfully")
 
 	// Trace provider
 	tracerProvider := sdktrace.NewTracerProvider(
@@ -91,47 +88,18 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	tracer = tracerProvider.Tracer("go-service-tracer")
-
-	// Metrics exporter
-	metricExporter, err := otlpmetrichttp.New(ctx,
-		otlpmetrichttp.WithEndpoint(otlpEndpoint),
-		otlpmetrichttp.WithInsecure(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
-	}
-
-	// Meter provider
-	meterProvider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
-		sdkmetric.WithResource(res),
-	)
-	otel.SetMeterProvider(meterProvider)
-
-	// Log exporter
-	logExporter, err := otlploghttp.New(ctx,
-		otlploghttp.WithEndpoint(otlpEndpoint),
-		otlploghttp.WithInsecure(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create log exporter: %w", err)
-	}
-
-	// Logger provider
-	loggerProvider := sdklog.NewLoggerProvider(
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
-		sdklog.WithResource(res),
-	)
-	global.SetLoggerProvider(loggerProvider)
-	logger = loggerProvider.Logger("go-service-logger")
+	log.Printf("TracerProvider initialized successfully")
 
 	// Cleanup function
 	cleanup := func() {
+		log.Printf("Shutting down TracerProvider...")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		tracerProvider.Shutdown(ctx)
-		meterProvider.Shutdown(ctx)
-		loggerProvider.Shutdown(ctx)
+		if err := tracerProvider.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		} else {
+			log.Printf("TracerProvider shutdown complete")
+		}
 	}
 
 	return cleanup, nil
