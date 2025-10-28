@@ -66,6 +66,14 @@ exporters:
     resource_to_telemetry_conversion:
       enabled: true
 
+  # Logs to Loki (using OTLP HTTP)
+  otlphttp/loki:
+    endpoint: http://${LOKI_ENDPOINT}:3100/otlp
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: otel-demo
+
   # Debug/Logging
   logging:
     loglevel: info
@@ -85,6 +93,12 @@ service:
       receivers: [otlp, prometheus]
       processors: [memory_limiter, batch, resource]
       exporters: [prometheusremotewrite/thanos, logging]
+
+    # Logs pipeline
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlphttp/loki, logging]
 
   telemetry:
     logs:
