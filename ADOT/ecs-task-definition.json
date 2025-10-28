@@ -313,7 +313,7 @@
         },
         {
           "name": "OTEL_METRICS_EXPORTER",
-          "value": "otlp"
+          "value": "prometheus"
         },
         {
           "name": "OTEL_LOGS_EXPORTER",
