@@ -82,7 +82,7 @@ async def create_order(order: Order):
     # Call Node.js service for inventory check
     try:
         response = await httpx_client.post(
-            "http://nodejs-service:3000/inventory/check",
+            "http://localhost:3000/inventory/check",
             json={"product_name": order.product_name, "quantity": order.quantity}
         )
         inventory_result = response.json()
@@ -96,7 +96,7 @@ async def create_order(order: Order):
     if inventory_result.get("available"):
         try:
             reserve_response = await httpx_client.post(
-                "http://nodejs-service:3000/inventory/reserve",
+                "http://localhost:3000/inventory/reserve",
                 json={"product_name": order.product_name, "quantity": order.quantity}
             )
             pricing_result = reserve_response.json()
@@ -109,7 +109,7 @@ async def create_order(order: Order):
     notification_result = None
     try:
         notification_response = await httpx_client.post(
-            "http://java-service:8081/notifications/send",
+            "http://localhost:8081/notifications/send",
             json={
                 "recipient": f"user_{order.user_id}@example.com",
                 "message": f"Your order #{order_id} for {order.quantity}x {order.product_name} has been placed!",
@@ -162,7 +162,7 @@ async def create_order_with_error(order: Order):
     # Call Node.js service for inventory check
     try:
         response = await httpx_client.post(
-            "http://nodejs-service:3000/inventory/check",
+            "http://localhost:3000/inventory/check",
             json={"product_name": order.product_name, "quantity": order.quantity}
         )
         inventory_result = response.json()
@@ -176,7 +176,7 @@ async def create_order_with_error(order: Order):
     if inventory_result.get("available"):
         try:
             reserve_response = await httpx_client.post(
-                "http://nodejs-service:3000/inventory/reserve/error",
+                "http://localhost:3000/inventory/reserve/error",
                 json={"product_name": order.product_name, "quantity": order.quantity}
             )
             pricing_result = reserve_response.json()
@@ -189,7 +189,7 @@ async def create_order_with_error(order: Order):
     notification_result = None
     try:
         notification_response = await httpx_client.post(
-            "http://java-service:8081/notifications/send",
+            "http://localhost:8081/notifications/send",
             json={
                 "recipient": f"user_{order.user_id}@example.com",
                 "message": f"Error occurred while processing order for {order.quantity}x {order.product_name}",

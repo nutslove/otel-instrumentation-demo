@@ -105,7 +105,7 @@ app.post('/inventory/reserve', async (req, res) => {
 
   // Call Go service for pricing
   try {
-    const response = await axios.post('http://go-service:8080/pricing/calculate', {
+    const response = await axios.post('http://localhost:8080/pricing/calculate', {
       product_name,
       quantity,
     });
@@ -140,7 +140,7 @@ app.post('/inventory/reserve/error', async (req, res) => {
 
   // Call Go service for pricing with error endpoint
   try {
-    const response = await axios.post('http://go-service:8080/pricing/calculate/error', {
+    const response = await axios.post('http://localhost:8080/pricing/calculate/error', {
       product_name,
       quantity,
     });
