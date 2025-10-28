@@ -42,6 +42,10 @@
         {
           "name": "THANOS_ENDPOINT",
           "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
+        },
+        {
+          "name": "LOKI_ENDPOINT",
+          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
         }
       ]
     },
