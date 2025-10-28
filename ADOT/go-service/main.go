@@ -16,9 +16,9 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -53,7 +53,7 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	// Get OTLP endpoint from environment variable
 	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if otlpEndpoint == "" {
-		otlpEndpoint = "localhost:4317" // Default fallback
+		otlpEndpoint = "localhost:4318" // Default fallback
 	}
 	// Remove http:// or https:// prefix if present
 	otlpEndpoint = fmt.Sprintf("%s", otlpEndpoint)
@@ -75,9 +75,9 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	}
 
 	// Trace exporter
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(otlpEndpoint),
-		otlptracegrpc.WithInsecure(),
+	traceExporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(otlpEndpoint),
+		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
@@ -93,9 +93,9 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	tracer = tracerProvider.Tracer("go-service-tracer")
 
 	// Metrics exporter
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(otlpEndpoint),
-		otlpmetricgrpc.WithInsecure(),
+	metricExporter, err := otlpmetrichttp.New(ctx,
+		otlpmetrichttp.WithEndpoint(otlpEndpoint),
+		otlpmetrichttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
@@ -109,9 +109,9 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	otel.SetMeterProvider(meterProvider)
 
 	// Log exporter
-	logExporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint(otlpEndpoint),
-		otlploggrpc.WithInsecure(),
+	logExporter, err := otlploghttp.New(ctx,
+		otlploghttp.WithEndpoint(otlpEndpoint),
+		otlploghttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create log exporter: %w", err)

@@ -85,15 +85,15 @@
       "environment": [
         {
           "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_PYTHON_DISTRO",
@@ -121,7 +121,7 @@
         },
         {
           "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
-          "value": "grpc"
+          "value": "http/protobuf"
         },
         {
           "name": "OTEL_TRACES_SAMPLER",
@@ -178,15 +178,15 @@
       "environment": [
         {
           "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_TRACES_EXPORTER",
@@ -202,7 +202,7 @@
         },
         {
           "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
-          "value": "grpc"
+          "value": "http/protobuf"
         },
         {
           "name": "OTEL_SERVICE_NAME",
@@ -247,7 +247,11 @@
       "environment": [
         {
           "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+          "value": "http/protobuf"
         }
       ],
       "logConfiguration": {
@@ -293,11 +297,11 @@
       "environment": [
         {
           "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-          "value": "http://localhost:4317"
+          "value": "http://localhost:4318"
         },
         {
           "name": "OTEL_SERVICE_NAME",
@@ -314,6 +318,10 @@
         {
           "name": "OTEL_LOGS_EXPORTER",
           "value": "otlp"
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+          "value": "http/protobuf"
         },
         {
           "name": "OTEL_METRICS_EXEMPLAR_FILTER",
