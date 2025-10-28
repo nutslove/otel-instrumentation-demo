@@ -8,18 +8,11 @@
   "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
   "containerDefinitions": [
     {
-      "name": "fluent-bit",
-      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:fluent-bit",
+      "name": "adot-collector",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:adot-collector",
       "essential": true,
       "cpu": 512,
       "memory": 1024,
-      "firelensConfiguration": {
-        "type": "fluentbit",
-        "options": {
-          "config-file-type": "file",
-          "config-file-value": "/custom-fluent-bit.conf"
-        }
-      },
       "portMappings": [
         {
           "containerPort": 4317,
@@ -30,7 +23,42 @@
           "containerPort": 4318,
           "protocol": "tcp",
           "name": "otlp-http"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/otel-demo-app",
+          "awslogs-region": "ap-northeast-1",
+          "awslogs-stream-prefix": "adot-collector",
+          "awslogs-create-group": "true"
+        }
+      },
+      "environment": [
+        {
+          "name": "TEMPO_ENDPOINT",
+          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
         },
+        {
+          "name": "THANOS_ENDPOINT",
+          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
+        }
+      ]
+    },
+    {
+      "name": "fluent-bit",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/otel-demo:fluent-bit",
+      "essential": true,
+      "cpu": 256,
+      "memory": 512,
+      "firelensConfiguration": {
+        "type": "fluentbit",
+        "options": {
+          "config-file-type": "file",
+          "config-file-value": "/custom-fluent-bit.conf"
+        }
+      },
+      "portMappings": [
         {
           "containerPort": 24224,
           "protocol": "tcp",
@@ -52,20 +80,8 @@
           "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
         },
         {
-          "name": "TEMPO_ENDPOINT",
-          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
-        },
-        {
-          "name": "THANOS_ENDPOINT",
-          "value": "lee-o11y-nlb-46edf6e7bd8276ca.elb.ap-northeast-1.amazonaws.com"
-        },
-        {
           "name": "AWS_REGION",
           "value": "ap-northeast-1"
-        },
-        {
-          "name": "ECS_CLUSTER",
-          "value": "otel-demo-cluster"
         }
       ]
     },
@@ -84,15 +100,7 @@
       ],
       "environment": [
         {
-          "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-          "value": "http://localhost:4318"
-        },
-        {
-          "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-          "value": "http://localhost:4318"
-        },
-        {
-          "name": "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
           "value": "http://localhost:4318"
         },
         {
@@ -177,15 +185,7 @@
       ],
       "environment": [
         {
-          "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-          "value": "http://localhost:4318"
-        },
-        {
-          "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-          "value": "http://localhost:4318"
-        },
-        {
-          "name": "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
           "value": "http://localhost:4318"
         },
         {
@@ -296,11 +296,7 @@
       ],
       "environment": [
         {
-          "name": "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-          "value": "http://localhost:4318"
-        },
-        {
-          "name": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
           "value": "http://localhost:4318"
         },
         {

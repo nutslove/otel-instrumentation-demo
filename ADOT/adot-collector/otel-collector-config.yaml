@@ -1,0 +1,91 @@
+receivers:
+  # Receive OTLP telemetry from applications
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Scrape Prometheus metrics from Java service
+  prometheus:
+    config:
+      scrape_configs:
+        # Java OpenTelemetry metrics on port 9464
+        - job_name: 'java-otel-metrics'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['localhost:9464']
+              labels:
+                service: 'java-spring-boot-service'
+                source: 'otel-java-agent'
+
+        # Java Actuator Prometheus endpoint on port 8081
+        - job_name: 'java-actuator-metrics'
+          scrape_interval: 15s
+          metrics_path: '/actuator/prometheus'
+          static_configs:
+            - targets: ['localhost:8081']
+              labels:
+                service: 'java-spring-boot-service'
+                source: 'spring-actuator'
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: ecs-fargate
+        action: upsert
+
+exporters:
+  # Traces to Tempo (using HTTP)
+  otlphttp/tempo:
+    endpoint: http://${TEMPO_ENDPOINT}:4318
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: otel-demo
+
+  # Metrics to Thanos via Prometheus Remote Write
+  prometheusremotewrite/thanos:
+    endpoint: http://${THANOS_ENDPOINT}:19291/api/v1/receive
+    tls:
+      insecure: true
+    headers:
+      THANOS-TENANT: otel-demo
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  # Debug/Logging
+  logging:
+    loglevel: info
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlphttp/tempo, logging]
+
+    # Metrics pipeline (OTLP + Prometheus scraping)
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheusremotewrite/thanos, logging]
+
+  telemetry:
+    logs:
+      level: info
