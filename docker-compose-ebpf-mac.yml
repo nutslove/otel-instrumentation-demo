@@ -162,6 +162,7 @@ services:
       dockerfile: Dockerfile
       no_cache: true
     container_name: go-service
+    pid: "host" # Use host PID namespace
     ports:
       - "8080:8080"
     volumes:
@@ -188,7 +189,7 @@ services:
     image: otel/autoinstrumentation-go:latest
     container_name: go-auto-instrumentation
     privileged: true
-    pid: "service:go-service"
+    pid: "host" # Use host PID namespace
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_GO_AUTO_TARGET_EXE=/app/go-service
@@ -198,6 +199,7 @@ services:
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
       - OTEL_LOG_LEVEL=debug
       - OTEL_GO_AUTO_INCLUDE_DB_STATEMENT=true
+      - OTEL_GO_AUTO_PARSE_DB_STATEMENTS=true
     volumes:
       - go-app-volume:/app
       - /proc:/host/proc
