@@ -14,11 +14,14 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
 
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otlog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -26,9 +29,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel/log/global"
-	otlog "go.opentelemetry.io/otel/log"
 )
 
 var (
@@ -52,6 +52,8 @@ type PricingResponse struct {
 func initTelemetry(ctx context.Context) (func(), error) {
 	// Resource
 	res, err := resource.New(ctx,
+		resource.WithContainer(), // Add container information
+		resource.WithProcess(),   // Add process information
 		resource.WithAttributes(
 			semconv.ServiceName("go-gin-service"),
 			semconv.ServiceVersion("1.0.0"),
@@ -62,9 +64,9 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	}
 
 	// Trace exporter
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint("otel-collector:4317"),
-		otlptracegrpc.WithInsecure(),
+	traceExporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint("otel-collector:4318"),
+		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
@@ -72,7 +74,10 @@ func initTelemetry(ctx context.Context) (func(), error) {
 
 	// Trace provider
 	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(traceExporter),
+		sdktrace.WithBatcher(
+			traceExporter,
+			sdktrace.WithBatchTimeout(time.Second), // デフォルトは5秒
+		),
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tracerProvider)
@@ -80,9 +85,9 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	tracer = tracerProvider.Tracer("go-service-tracer")
 
 	// Metrics exporter
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint("otel-collector:4317"),
-		otlpmetricgrpc.WithInsecure(),
+	metricExporter, err := otlpmetrichttp.New(ctx,
+		otlpmetrichttp.WithEndpoint("otel-collector:4318"),
+		otlpmetrichttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
@@ -96,9 +101,9 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	otel.SetMeterProvider(meterProvider)
 
 	// Log exporter
-	logExporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint("otel-collector:4317"),
-		otlploggrpc.WithInsecure(),
+	logExporter, err := otlploghttp.New(ctx,
+		otlploghttp.WithEndpoint("otel-collector:4318"),
+		otlploghttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create log exporter: %w", err)
@@ -237,16 +242,18 @@ func main() {
 		)
 
 		// Database query with span
+		sql := "SELECT unit_price FROM pricing WHERE product_name = ?"
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_pricing",
 			trace.WithAttributes(
-				attribute.String("db.operation", "select"),
-				attribute.String("db.table", "pricing"),
+				attribute.String("db.operation.name", "select"),
+				attribute.String("db.collection.name", "pricing"),
+				attribute.String("db.query.text", sql),
 				attribute.String("product.name", req.ProductName),
 			),
 		)
 
 		var unitPrice float64
-		err := db.QueryRowContext(dbCtx, "SELECT unit_price FROM pricing WHERE product_name = ?", req.ProductName).Scan(&unitPrice)
+		err := db.QueryRowContext(dbCtx, sql, req.ProductName).Scan(&unitPrice)
 		dbSpan.End()
 
 		if err != nil {
@@ -350,16 +357,18 @@ func main() {
 		)
 
 		// Simulate pricing calculation but return error
+		sql := "SELECT unit_price FROM pricing WHERE product_name = ?"
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_pricing_error",
 			trace.WithAttributes(
-				attribute.String("db.operation", "select"),
-				attribute.String("db.table", "pricing"),
+				attribute.String("db.operation.name", "select"),
+				attribute.String("db.collection.name", "pricing"),
+				attribute.String("db.query.text", sql),
 				attribute.String("product.name", req.ProductName),
 			),
 		)
 
 		var unitPrice float64
-		err := db.QueryRowContext(dbCtx, "SELECT unit_price FROM pricing WHERE product_name = ?", req.ProductName).Scan(&unitPrice)
+		err := db.QueryRowContext(dbCtx, sql, req.ProductName).Scan(&unitPrice)
 		dbSpan.End()
 
 		if err != nil {
