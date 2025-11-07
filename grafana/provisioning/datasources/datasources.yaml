@@ -1,13 +1,14 @@
 apiVersion: 1
 
 datasources:
-  # Tempo for Traces
-  - name: Tempo
+  # Tempo for Traces - Python Service
+  - name: Tempo (Python)
     type: tempo
     access: proxy
     url: http://tempo:3200
-    uid: tempo
+    uid: tempo-python
     jsonData:
+      httpHeaderName1: 'X-Scope-OrgID'
       tracesToLogsV2:
         datasourceUid: loki
         spanStartTimeShift: '-1h'
@@ -24,6 +25,143 @@ datasources:
         hide: false
       lokiSearch:
         datasourceUid: loki
+    secureJsonData:
+      httpHeaderValue1: 'python-service'
+
+  # Tempo for Traces - Node.js Service
+  - name: Tempo (Node.js)
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo-nodejs
+    jsonData:
+      httpHeaderName1: 'X-Scope-OrgID'
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+    secureJsonData:
+      httpHeaderValue1: 'nodejs-service'
+
+  # Tempo for Traces - Go Service
+  - name: Tempo (Go)
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo-go
+    jsonData:
+      httpHeaderName1: 'X-Scope-OrgID'
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+    secureJsonData:
+      httpHeaderValue1: 'go-service'
+
+  # Tempo for Traces - Java Service
+  - name: Tempo (Java)
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo-java
+    jsonData:
+      httpHeaderName1: 'X-Scope-OrgID'
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+    secureJsonData:
+      httpHeaderValue1: 'java-service'
+
+  # Tempo for Traces - multi-tenant queries
+  - name: Tempo (multi-tenant)
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo-multi-tenant
+    jsonData:
+      httpHeaderName1: 'X-Scope-OrgID'
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+    secureJsonData:
+      httpHeaderValue1: 'go-service|python-service|nodejs-service|java-service'
+
+  # Tempo for Traces - Default
+  - name: Tempo (Default)
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo
+    jsonData:
+      httpHeaderName1: 'X-Scope-OrgID'
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+    secureJsonData:
+      httpHeaderValue1: 'default'
 
   # Loki for Logs
   - name: Loki

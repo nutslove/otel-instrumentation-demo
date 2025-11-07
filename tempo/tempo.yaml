@@ -1,6 +1,9 @@
 server:
   http_listen_port: 3200
 
+# Enable multi-tenancy mode
+multitenancy_enabled: true
+
 distributor:
   receivers:
     otlp:
@@ -16,7 +19,8 @@ ingester:
 compactor:
   compaction:
     block_retention: 1h
-
+# query_frontend:
+#   multi_tenant_queries_enabled: true
 storage:
   trace:
     backend: local
