@@ -1,0 +1,10 @@
+flask>=3.0.0
+flask-cors>=4.0.0
+requests>=2.31.0
+gunicorn>=21.2.0
+opentelemetry-distro
+opentelemetry-exporter-otlp-proto-grpc
+opentelemetry-instrumentation-flask
+opentelemetry-instrumentation-requests
+opentelemetry-instrumentation-sqlite3
+opentelemetry-instrumentation-logging
