@@ -16,25 +16,18 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel/log/global"
-	otlog "go.opentelemetry.io/otel/log"
 )
 
 var (
 	db     *sql.DB
 	tracer trace.Tracer
-	logger otlog.Logger
 )
 
 type PricingRequest struct {
@@ -50,6 +43,21 @@ type PricingResponse struct {
 }
 
 func initTelemetry(ctx context.Context) (func(), error) {
+	// Get OTLP endpoint from environment variable
+	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otlpEndpoint == "" {
+		otlpEndpoint = "localhost:4318" // Default fallback
+	}
+	// Remove http:// or https:// prefix if present
+	otlpEndpoint = fmt.Sprintf("%s", otlpEndpoint)
+	if len(otlpEndpoint) > 7 && otlpEndpoint[:7] == "http://" {
+		otlpEndpoint = otlpEndpoint[7:]
+	} else if len(otlpEndpoint) > 8 && otlpEndpoint[:8] == "https://" {
+		otlpEndpoint = otlpEndpoint[8:]
+	}
+
+	log.Printf("Initializing OpenTelemetry with endpoint: %s", otlpEndpoint)
+
 	// Resource
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -62,13 +70,15 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	}
 
 	// Trace exporter
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint("adot-collector:4317"),
-		otlptracegrpc.WithInsecure(),
+	traceExporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(otlpEndpoint),
+		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
+		log.Printf("Failed to create trace exporter: %v", err)
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
+	log.Printf("OTLP trace exporter initialized successfully")
 
 	// Trace provider
 	tracerProvider := sdktrace.NewTracerProvider(
@@ -78,71 +88,21 @@ func initTelemetry(ctx context.Context) (func(), error) {
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	tracer = tracerProvider.Tracer("go-service-tracer")
-
-	// Metrics exporter
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint("adot-collector:4317"),
-		otlpmetricgrpc.WithInsecure(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
-	}
-
-	// Meter provider
-	meterProvider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
-		sdkmetric.WithResource(res),
-	)
-	otel.SetMeterProvider(meterProvider)
-
-	// Log exporter
-	logExporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint("adot-collector:4317"),
-		otlploggrpc.WithInsecure(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create log exporter: %w", err)
-	}
-
-	// Logger provider
-	loggerProvider := sdklog.NewLoggerProvider(
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
-		sdklog.WithResource(res),
-	)
-	global.SetLoggerProvider(loggerProvider)
-	logger = loggerProvider.Logger("go-service-logger")
+	log.Printf("TracerProvider initialized successfully")
 
 	// Cleanup function
 	cleanup := func() {
+		log.Printf("Shutting down TracerProvider...")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		tracerProvider.Shutdown(ctx)
-		meterProvider.Shutdown(ctx)
-		loggerProvider.Shutdown(ctx)
+		if err := tracerProvider.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		} else {
+			log.Printf("TracerProvider shutdown complete")
+		}
 	}
 
 	return cleanup, nil
-}
-
-func emitLog(ctx context.Context, severity otlog.Severity, message string, attrs ...attribute.KeyValue) {
-	span := trace.SpanFromContext(ctx)
-	spanCtx := span.SpanContext()
-
-	// Convert attribute.KeyValue to otlog.KeyValue
-	logAttrs := make([]otlog.KeyValue, len(attrs)+2)
-	for i, attr := range attrs {
-		logAttrs[i] = otlog.String(string(attr.Key), attr.Value.AsString())
-	}
-	logAttrs[len(attrs)] = otlog.String("trace_id", spanCtx.TraceID().String())
-	logAttrs[len(attrs)+1] = otlog.String("span_id", spanCtx.SpanID().String())
-
-	var record otlog.Record
-	record.SetTimestamp(time.Now())
-	record.SetSeverity(severity)
-	record.SetBody(otlog.StringValue(message))
-	record.AddAttributes(logAttrs...)
-
-	logger.Emit(ctx, record)
 }
 
 func initDB() error {
@@ -211,7 +171,7 @@ func main() {
 		span := trace.SpanFromContext(ctx)
 		traceID := span.SpanContext().TraceID().String()
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Go service root endpoint called - trace_id: %s", traceID))
+		log.Printf("Go service root endpoint called - trace_id: %s", traceID)
 
 		c.JSON(http.StatusOK, gin.H{
 			"service": "go-gin",
@@ -226,15 +186,12 @@ func main() {
 
 		var req PricingRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Invalid request: %v - trace_id: %s", err, traceID))
+			log.Printf("Invalid request: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Calculating pricing for %s - trace_id: %s", req.ProductName, traceID),
-			attribute.String("product.name", req.ProductName),
-			attribute.Int("quantity", req.Quantity),
-		)
+		log.Printf("Calculating pricing for %s (quantity: %d) - trace_id: %s", req.ProductName, req.Quantity, traceID)
 
 		// Database query with span
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_pricing",
@@ -250,17 +207,14 @@ func main() {
 		dbSpan.End()
 
 		if err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
+			log.Printf("Database error: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 			return
 		}
 
 		totalPrice := unitPrice * float64(req.Quantity)
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Pricing calculated: %.2f - trace_id: %s", totalPrice, traceID),
-			attribute.Float64("unit.price", unitPrice),
-			attribute.Float64("total.price", totalPrice),
-		)
+		log.Printf("Pricing calculated: %.2f (unit_price: %.2f) - trace_id: %s", totalPrice, unitPrice, traceID)
 
 		c.JSON(http.StatusOK, PricingResponse{
 			ProductName: req.ProductName,
@@ -275,7 +229,7 @@ func main() {
 		span := trace.SpanFromContext(ctx)
 		traceID := span.SpanContext().TraceID().String()
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Fetching all pricing - trace_id: %s", traceID))
+		log.Printf("Fetching all pricing - trace_id: %s", traceID)
 
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_all_pricing",
 			trace.WithAttributes(
@@ -288,7 +242,7 @@ func main() {
 		dbSpan.End()
 
 		if err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
+			log.Printf("Database error: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -309,7 +263,7 @@ func main() {
 			})
 		}
 
-		emitLog(ctx, otlog.SeverityInfo, fmt.Sprintf("Retrieved %d pricing items - trace_id: %s", len(pricing), traceID))
+		log.Printf("Retrieved %d pricing items - trace_id: %s", len(pricing), traceID)
 
 		c.JSON(http.StatusOK, gin.H{
 			"pricing": pricing,
@@ -325,7 +279,7 @@ func main() {
 		span := trace.SpanFromContext(ctx)
 		traceID := span.SpanContext().TraceID().String()
 
-		emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Intentional error triggered - trace_id: %s", traceID))
+		log.Printf("ERROR: Intentional error triggered - trace_id: %s", traceID)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Intentional error for testing",
@@ -339,15 +293,12 @@ func main() {
 
 		var req PricingRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Invalid request: %v - trace_id: %s", err, traceID))
+			log.Printf("ERROR: Invalid request: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Intentional pricing error for %s - trace_id: %s", req.ProductName, traceID),
-			attribute.String("product.name", req.ProductName),
-			attribute.Int("quantity", req.Quantity),
-		)
+		log.Printf("ERROR: Intentional pricing error for %s (quantity: %d) - trace_id: %s", req.ProductName, req.Quantity, traceID)
 
 		// Simulate pricing calculation but return error
 		dbCtx, dbSpan := tracer.Start(ctx, "db_select_pricing_error",
@@ -363,14 +314,14 @@ func main() {
 		dbSpan.End()
 
 		if err != nil {
-			emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Database error: %v - trace_id: %s", err, traceID))
+			log.Printf("ERROR: Database error: %v - trace_id: %s", err, traceID)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 			return
 		}
 
 		totalPrice := unitPrice * float64(req.Quantity)
 
-		emitLog(ctx, otlog.SeverityError, fmt.Sprintf("Pricing calculation error (intentional): %.2f - trace_id: %s", totalPrice, traceID))
+		log.Printf("ERROR: Pricing calculation error (intentional): %.2f - trace_id: %s", totalPrice, traceID)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":        "Intentional pricing calculation error",

@@ -21,12 +21,60 @@ processors:
         value: homelab
         action: insert
 
+connectors:
+  routing:
+    default_pipelines: [traces/default]
+    error_mode: ignore
+    table:
+      - statement: route() where resource.attributes["service.name"] == "python-fastapi-service"
+        pipelines: [traces/python]
+      - statement: route() where resource.attributes["service.name"] == "nodejs-express-service"
+        pipelines: [traces/nodejs]
+      - statement: route() where resource.attributes["service.name"] == "go-gin-service"
+        pipelines: [traces/go]
+      - statement: route() where resource.attributes["service.name"] == "java-spring-boot-service"
+        pipelines: [traces/java]
+
 exporters:
-  # Tempo for traces
+  # Tempo for traces - Python service tenant
+  otlp/tempo-python:
+    endpoint: tempo:4319
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: "python-service"
+
+  # Tempo for traces - Node.js service tenant
+  otlp/tempo-nodejs:
+    endpoint: tempo:4319
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: "nodejs-service"
+
+  # Tempo for traces - Go service tenant
+  otlp/tempo-go:
+    endpoint: tempo:4319
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: "go-service"
+
+  # Tempo for traces - Java service tenant
+  otlp/tempo-java:
+    endpoint: tempo:4319
+    tls:
+      insecure: true
+    headers:
+      X-Scope-OrgID: "java-service"
+
+  # Tempo for traces - Default tenant for any other services
   otlp/tempo:
     endpoint: tempo:4319
     tls:
       insecure: true
+    headers:
+      X-Scope-OrgID: "default"
 
   # Loki for logs
   otlphttp/loki:
@@ -46,9 +94,31 @@ exporters:
 
 service:
   pipelines:
+    # Main traces pipeline - routes to connector
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
+      exporters: [routing]
+
+    # Tenant-specific trace pipelines
+    traces/python:
+      receivers: [routing]
+      exporters: [otlp/tempo-python, debug]
+
+    traces/nodejs:
+      receivers: [routing]
+      exporters: [otlp/tempo-nodejs, debug]
+
+    traces/go:
+      receivers: [routing]
+      exporters: [otlp/tempo-go, debug]
+
+    traces/java:
+      receivers: [routing]
+      exporters: [otlp/tempo-java, debug]
+
+    traces/default:
+      receivers: [routing]
       exporters: [otlp/tempo, debug]
 
     metrics:
