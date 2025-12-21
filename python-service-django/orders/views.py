@@ -1,78 +1,55 @@
-import os
-import sqlite3
+import json
 import logging
-from flask import Flask, request, jsonify
-from flask_cors import CORS
 import requests
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from .models import Order
 
-# Configure logging - log format is set by OTEL_PYTHON_LOG_FORMAT environment variable
-# Trace context injection is enabled by OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED
-logging.basicConfig(
-    level=logging.INFO
-)
 logger = logging.getLogger(__name__)
 
-DB_PATH = "/data/orders.db"
 
-app = Flask(__name__)
-CORS(app)
+def root(request):
+    logger.info("Python Django service root endpoint called")
+    return JsonResponse({"service": "python-django", "status": "running"})
 
-# Flask instrumentation is handled automatically by opentelemetry-instrument command
-# WSGI instrumentation is disabled via OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=wsgi
-# to ensure Flask instrumentation properly handles exemplars
 
-def init_db():
-    """Initialize SQLite database"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            product_name TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            status TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def orders_view(request):
+    """Handle both GET (list orders) and POST (create order)"""
+    if request.method == "GET":
+        return get_orders(request)
+    else:
+        return create_order(request)
 
-# Initialize database on startup
-with app.app_context():
-    init_db()
 
-@app.route("/")
-def root():
-    logger.info("Python Flask service root endpoint called")
-    return jsonify({"service": "python-flask", "status": "running"})
-
-@app.route("/orders", methods=["POST"])
-def create_order():
-    data = request.get_json()
-
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
+@csrf_exempt
+def create_order(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     user_id = data.get("user_id")
     product_name = data.get("product_name")
     quantity = data.get("quantity")
 
     if not all([user_id, product_name, quantity]):
-        return jsonify({"error": "Missing required fields: user_id, product_name, quantity"}), 400
+        return JsonResponse(
+            {"error": "Missing required fields: user_id, product_name, quantity"},
+            status=400
+        )
 
     logger.info(f"Creating order for user {user_id}")
 
-    # Database insert
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO orders (user_id, product_name, quantity, status) VALUES (?, ?, ?, ?)",
-        (user_id, product_name, quantity, "pending")
+    # Create order in database
+    order = Order.objects.create(
+        user_id=user_id,
+        product_name=product_name,
+        quantity=quantity,
+        status="pending"
     )
-    order_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
 
     # Call Node.js service for inventory check
     try:
@@ -87,7 +64,7 @@ def create_order():
         logger.error(f"Failed to check inventory: {e}")
         inventory_result = {"available": False, "error": str(e)}
 
-    # If inventory is available, reserve it (Node.js → Go)
+    # If inventory is available, reserve it (Node.js -> Go)
     pricing_result = None
     if inventory_result.get("available"):
         try:
@@ -109,7 +86,7 @@ def create_order():
             "http://java-service:8081/notifications/send",
             json={
                 "recipient": f"user_{user_id}@example.com",
-                "message": f"Your order #{order_id} for {quantity}x {product_name} has been placed!",
+                "message": f"Your order #{order.id} for {quantity}x {product_name} has been placed!",
                 "type": "email"
             },
             timeout=10
@@ -120,52 +97,59 @@ def create_order():
         logger.error(f"Failed to send notification: {e}")
         notification_result = {"error": str(e)}
 
-    logger.info(f"Order {order_id} created successfully")
+    logger.info(f"Order {order.id} created successfully")
 
-    return jsonify({
-        "order_id": order_id,
+    return JsonResponse({
+        "order_id": order.id,
         "status": "pending",
         "inventory_check": inventory_result,
         "pricing": pricing_result,
         "notification": notification_result
     })
 
-@app.route("/orders", methods=["GET"])
-def get_orders():
+
+@require_http_methods(["GET"])
+def get_orders(request):
     logger.info("Fetching all orders")
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM orders ORDER BY created_at DESC")
-    orders = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+    orders = list(Order.objects.all().values(
+        'id', 'user_id', 'product_name', 'quantity', 'status', 'created_at'
+    ))
+
+    # Convert datetime to string for JSON serialization
+    for order in orders:
+        order['created_at'] = order['created_at'].isoformat() if order['created_at'] else None
 
     logger.info(f"Retrieved {len(orders)} orders")
-    return jsonify({"orders": orders})
+    return JsonResponse({"orders": orders})
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "healthy"})
 
-@app.route("/error")
-def intentional_error():
+def health(request):
+    return JsonResponse({"status": "healthy"})
+
+
+def intentional_error(request):
     logger.error("Intentional error triggered")
-    return jsonify({"detail": "Intentional error for testing"}), 500
+    return JsonResponse({"detail": "Intentional error for testing"}, status=500)
 
-@app.route("/orders/error", methods=["POST"])
-def create_order_with_error():
-    data = request.get_json()
 
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_order_with_error(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     user_id = data.get("user_id")
     product_name = data.get("product_name")
     quantity = data.get("quantity")
 
     if not all([user_id, product_name, quantity]):
-        return jsonify({"error": "Missing required fields: user_id, product_name, quantity"}), 400
+        return JsonResponse(
+            {"error": "Missing required fields: user_id, product_name, quantity"},
+            status=400
+        )
 
     logger.info(f"Creating order with intentional error for user {user_id}")
 
@@ -217,13 +201,10 @@ def create_order_with_error():
 
     logger.error("Order workflow completed with errors")
 
-    return jsonify({
+    return JsonResponse({
         "status": "error",
         "inventory_check": inventory_result,
         "pricing_error": pricing_result,
         "notification": notification_result,
         "message": "This order workflow intentionally includes errors across all services for testing"
     })
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)

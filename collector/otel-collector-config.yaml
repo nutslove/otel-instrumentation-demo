@@ -28,6 +28,10 @@ connectors:
     table:
       - statement: route() where resource.attributes["service.name"] == "python-fastapi-service"
         pipelines: [traces/python]
+      - statement: route() where resource.attributes["service.name"] == "python-django-service"
+        pipelines: [traces/python]
+      - statement: route() where resource.attributes["service.name"] == "python-flask-service"
+        pipelines: [traces/python]
       - statement: route() where resource.attributes["service.name"] == "nodejs-express-service"
         pipelines: [traces/nodejs]
       - statement: route() where resource.attributes["service.name"] == "go-gin-service"

@@ -80,16 +80,16 @@ services:
       - loki
       - prometheus
 
-  # Python Flask Service - Order Management
+  # Python Django Service - Order Management
   python-service:
     build:
-      context: ./python-service-flask
+      context: ./python-service-django
       dockerfile: Dockerfile
       no_cache: true
     container_name: python-service
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
-      - OTEL_SERVICE_NAME=python-flask-service
+      - OTEL_SERVICE_NAME=python-django-service
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_LOGS_EXPORTER=otlp
@@ -98,11 +98,11 @@ services:
       - OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
       - OTEL_PYTHON_LOG_CORRELATION=true
       - OTEL_PYTHON_LOG_FORMAT=%(asctime)s [%(levelname)s] trace_id=%(otelTraceID)s span_id=%(otelSpanID)s - %(message)s
-      # Disable WSGI instrumentation to use Flask instrumentation for proper exemplar support
-      - OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=wsgi
+      # Disable Flask/WSGI instrumentation since this is Django
+      - OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=flask,wsgi
+      - DJANGO_SETTINGS_MODULE=orderservice.settings
     ports:
       - "8000:8000"
-      - "8188:8080"
     volumes:
       - ./data:/data
     depends_on:
@@ -225,7 +225,7 @@ services:
     image: nginx:alpine
     container_name: web-ui
     volumes:
-      - ./web-ui-flask:/usr/share/nginx/html:ro
+      - ./web-ui-django:/usr/share/nginx/html:ro
     ports:
       - "80:80"
     networks:

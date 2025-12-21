@@ -1,10 +1,13 @@
-fastapi>=0.109.0
-uvicorn>=0.27.0
-httpx>=0.26.0
-pydantic>=2.5.3
-opentelemetry-distro
-opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-httpx
-opentelemetry-instrumentation-sqlite3
-opentelemetry-instrumentation-logging
+# FastAPI and related packages (latest versions as of Dec 2025)
+fastapi==0.126.0
+uvicorn==0.38.0
+httpx==0.28.1
+pydantic==2.12.5
+
+# OpenTelemetry packages (latest versions as of Dec 2025)
+opentelemetry-distro==0.60b1
+opentelemetry-exporter-otlp-proto-grpc==1.39.1
+opentelemetry-instrumentation-fastapi==0.60b1
+opentelemetry-instrumentation-httpx==0.60b1
+opentelemetry-instrumentation-sqlite3==0.60b1
+opentelemetry-instrumentation-logging==0.60b1

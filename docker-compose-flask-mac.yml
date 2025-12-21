@@ -225,7 +225,7 @@ services:
     image: nginx:alpine
     container_name: web-ui
     volumes:
-      - ./web-ui:/usr/share/nginx/html:ro
+      - ./web-ui-flask:/usr/share/nginx/html:ro
     ports:
       - "80:80"
     networks:
