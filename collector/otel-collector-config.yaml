@@ -95,6 +95,8 @@ exporters:
     # Enable exemplar support for Remote Write 2.0
     send_metadata: true
     add_metric_suffixes: false
+    resource_to_telemetry_conversion:
+      enabled: true
 
 service:
   pipelines:

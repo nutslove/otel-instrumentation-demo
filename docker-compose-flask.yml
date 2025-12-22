@@ -101,7 +101,7 @@ services:
       # Disable WSGI instrumentation to use Flask instrumentation for proper exemplar support
       - OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=wsgi
     ports:
-      - "8000:8000"
+      - "8002:8000"
       - "8188:8080"
     volumes:
       - ./data:/data
